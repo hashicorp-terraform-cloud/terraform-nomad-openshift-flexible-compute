@@ -1,1 +1,1 @@
-# terraform-nomad-openshift-grey-compute
+# terraform-nomad-openshift-flexible-compute
