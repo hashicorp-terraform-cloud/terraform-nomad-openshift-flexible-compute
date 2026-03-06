@@ -1,0 +1,6 @@
+---
+- name: Remove Nomad Enterprise Client
+  hosts: all
+  become: true
+  roles:
+    - nomad_client_remove

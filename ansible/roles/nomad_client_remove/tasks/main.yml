@@ -1,0 +1,115 @@
+---
+- name: Stop Nomad service
+  ansible.builtin.service:
+    name: nomad
+    state: stopped
+    enabled: false
+  ignore_errors: true
+  when: ansible_os_family != "Windows"
+
+- name: Stop Nomad service (Windows)
+  ansible.windows.win_service:
+    name: nomad
+    state: stopped
+    start_mode: disabled
+  ignore_errors: true
+  when: ansible_os_family == "Windows"
+
+# --- Package manager removal (RedHat / Debian) ---
+
+- name: Remove Nomad Enterprise package
+  ansible.builtin.package:
+    name: "{{ nomad_package }}"
+    state: absent
+  when: ansible_os_family in ["RedHat", "Debian"]
+
+- name: Remove HashiCorp yum repository
+  ansible.builtin.yum_repository:
+    name: hashicorp
+    state: absent
+  when: ansible_os_family == "RedHat"
+
+- name: Remove HashiCorp apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    state: absent
+  when: ansible_os_family == "Debian"
+
+- name: Remove HashiCorp GPG key
+  ansible.builtin.apt_key:
+    url: https://apt.releases.hashicorp.com/gpg
+    state: absent
+  when: ansible_os_family == "Debian"
+
+# --- Direct download removal (Linux, non-package) ---
+
+- name: Remove Nomad binary
+  ansible.builtin.file:
+    path: "{{ nomad_install_dir }}/nomad"
+    state: absent
+  when:
+    - ansible_system in ["Linux", "Darwin"]
+    - ansible_os_family not in ["RedHat", "Debian"]
+
+- name: Remove Nomad systemd unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/nomad.service
+    state: absent
+  when:
+    - ansible_system == "Linux"
+    - ansible_os_family not in ["RedHat", "Debian"]
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - ansible_system == "Linux"
+    - ansible_os_family not in ["RedHat", "Debian"]
+
+# --- Direct download removal (macOS) ---
+
+- name: Remove Nomad launchd plist
+  ansible.builtin.file:
+    path: /Library/LaunchDaemons/com.hashicorp.nomad.plist
+    state: absent
+  when: ansible_system == "Darwin"
+
+# --- Direct download removal (Windows) ---
+
+- name: Remove Nomad Windows service
+  ansible.windows.win_service:
+    name: nomad
+    state: absent
+  when: ansible_os_family == "Windows"
+
+- name: Remove Nomad binary (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_install_dir }}\\nomad.exe"
+    state: absent
+  when: ansible_os_family == "Windows"
+
+# --- Common cleanup ---
+
+- name: Remove Nomad configuration directory
+  ansible.builtin.file:
+    path: "{{ nomad_config_dir }}"
+    state: absent
+  when: ansible_os_family != "Windows"
+
+- name: Remove Nomad data directory
+  ansible.builtin.file:
+    path: "{{ nomad_data_dir }}"
+    state: absent
+  when: ansible_os_family != "Windows"
+
+- name: Remove Nomad configuration directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_config_dir }}"
+    state: absent
+  when: ansible_os_family == "Windows"
+
+- name: Remove Nomad data directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_data_dir }}"
+    state: absent
+  when: ansible_os_family == "Windows"

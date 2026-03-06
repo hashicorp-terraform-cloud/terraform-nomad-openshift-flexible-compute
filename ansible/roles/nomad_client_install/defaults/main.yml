@@ -1,0 +1,26 @@
+---
+# Required — passed from Terraform via AAP extra_vars
+nomad_server_address: ""
+
+# Package
+nomad_package: "nomad-enterprise"
+nomad_version: "1.11.2+ent"
+
+# Direct download (non-RedHat/Debian)
+nomad_install_dir: "/usr/local/bin"
+nomad_arch_map:
+  x86_64: "amd64"
+  aarch64: "arm64"
+  arm64: "arm64"
+  s390x: "s390x"
+  AMD64: "amd64"
+  64-bit: "amd64"
+
+# Configuration
+nomad_datacenter: "dc1"
+nomad_region: "global"
+nomad_data_dir: "/opt/nomad"
+nomad_config_dir: "/etc/nomad.d"
+
+# Enterprise license (optional — can also be set via NOMAD_LICENSE env var)
+nomad_license: ""

@@ -1,0 +1,5 @@
+---
+nomad_package: "nomad-enterprise"
+nomad_install_dir: "/usr/local/bin"
+nomad_data_dir: "/opt/nomad"
+nomad_config_dir: "/etc/nomad.d"

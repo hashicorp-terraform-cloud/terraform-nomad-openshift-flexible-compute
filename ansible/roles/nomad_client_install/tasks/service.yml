@@ -1,0 +1,14 @@
+---
+- name: Enable and start Nomad service
+  ansible.builtin.service:
+    name: nomad
+    state: started
+    enabled: true
+  when: ansible_os_family != "Windows"
+
+- name: Enable and start Nomad service (Windows)
+  ansible.windows.win_service:
+    name: nomad
+    state: started
+    start_mode: auto
+  when: ansible_os_family == "Windows"

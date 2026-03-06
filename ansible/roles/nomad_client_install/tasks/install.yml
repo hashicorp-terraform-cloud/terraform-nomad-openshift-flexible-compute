@@ -1,0 +1,140 @@
+---
+# --- Package manager (RedHat) ---
+
+- name: Add HashiCorp yum repository
+  ansible.builtin.yum_repository:
+    name: hashicorp
+    description: HashiCorp Stable - $basearch
+    baseurl: https://rpm.releases.hashicorp.com/RHEL/$releasever/$basearch/stable
+    gpgcheck: true
+    gpgkey: https://rpm.releases.hashicorp.com/gpg
+    enabled: true
+  when: ansible_os_family == "RedHat"
+
+# --- Package manager (Debian) ---
+
+- name: Add HashiCorp GPG key (Debian)
+  ansible.builtin.apt_key:
+    url: https://apt.releases.hashicorp.com/gpg
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Add HashiCorp apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Install Nomad Enterprise package
+  ansible.builtin.package:
+    name: "{{ nomad_package }}"
+    state: present
+  when: ansible_os_family in ["RedHat", "Debian"]
+
+# --- Direct download (Linux, non-package-managed) ---
+
+- name: Create nomad group
+  ansible.builtin.group:
+    name: nomad
+    system: true
+    state: present
+  when:
+    - ansible_system == "Linux"
+    - ansible_os_family not in ["RedHat", "Debian"]
+
+- name: Create nomad user
+  ansible.builtin.user:
+    name: nomad
+    group: nomad
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+  when:
+    - ansible_system == "Linux"
+    - ansible_os_family not in ["RedHat", "Debian"]
+
+# --- Direct download binary (Linux + macOS) ---
+
+- name: Download and extract Nomad Enterprise binary
+  ansible.builtin.unarchive:
+    src: "https://releases.hashicorp.com/nomad/{{ nomad_version }}/nomad_{{ nomad_version }}_{{ ansible_system | lower }}_{{ nomad_arch_map[ansible_architecture] | default('amd64') }}.zip"
+    dest: "{{ nomad_install_dir }}"
+    remote_src: true
+    mode: "0755"
+  when:
+    - ansible_os_family not in ["RedHat", "Debian"]
+    - ansible_os_family != "Windows"
+
+- name: Create Nomad configuration directory
+  ansible.builtin.file:
+    path: "{{ nomad_config_dir }}"
+    state: directory
+    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0750"
+  when:
+    - ansible_os_family not in ["RedHat", "Debian"]
+    - ansible_os_family != "Windows"
+
+# --- Direct download binary (Windows) ---
+
+- name: Create Nomad install directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_install_dir }}"
+    state: directory
+  when: ansible_os_family == "Windows"
+
+- name: Download Nomad Enterprise archive (Windows)
+  ansible.windows.win_get_url:
+    url: "https://releases.hashicorp.com/nomad/{{ nomad_version }}/nomad_{{ nomad_version }}_windows_{{ nomad_arch_map[ansible_architecture] | default('amd64') }}.zip"
+    dest: "{{ nomad_install_dir }}\\nomad.zip"
+  when: ansible_os_family == "Windows"
+
+- name: Extract Nomad Enterprise binary (Windows)
+  ansible.windows.win_shell: |
+    Expand-Archive -Path "{{ nomad_install_dir }}\nomad.zip" -DestinationPath "{{ nomad_install_dir }}" -Force
+    Remove-Item "{{ nomad_install_dir }}\nomad.zip"
+  when: ansible_os_family == "Windows"
+
+- name: Create Nomad configuration directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_config_dir }}"
+    state: directory
+  when: ansible_os_family == "Windows"
+
+# --- Service definition (Linux, non-package) ---
+
+- name: Install Nomad systemd unit
+  ansible.builtin.template:
+    src: nomad.service.j2
+    dest: /etc/systemd/system/nomad.service
+    mode: "0644"
+  when:
+    - ansible_system == "Linux"
+    - ansible_os_family not in ["RedHat", "Debian"]
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - ansible_system == "Linux"
+    - ansible_os_family not in ["RedHat", "Debian"]
+
+# --- Service definition (macOS) ---
+
+- name: Install Nomad launchd plist
+  ansible.builtin.template:
+    src: com.hashicorp.nomad.plist.j2
+    dest: /Library/LaunchDaemons/com.hashicorp.nomad.plist
+    mode: "0644"
+  when: ansible_system == "Darwin"
+
+# --- Service definition (Windows) ---
+
+- name: Create Nomad Windows service
+  ansible.windows.win_service:
+    name: nomad
+    path: '"{{ nomad_install_dir }}\nomad.exe" agent -config "{{ nomad_config_dir }}"'
+    start_mode: auto
+    state: stopped
+  when: ansible_os_family == "Windows"

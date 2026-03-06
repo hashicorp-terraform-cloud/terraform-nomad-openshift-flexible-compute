@@ -1,0 +1,27 @@
+---
+- name: Create Nomad data directory
+  ansible.builtin.file:
+    path: "{{ nomad_data_dir }}"
+    state: directory
+    owner: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
+    group: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
+    mode: "{{ (ansible_os_family == 'Windows') | ternary(omit, '0750') }}"
+
+- name: Template Nomad client configuration
+  ansible.builtin.template:
+    src: nomad.hcl.j2
+    dest: "{{ nomad_config_dir }}/nomad.hcl"
+    owner: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
+    group: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
+    mode: "{{ (ansible_os_family == 'Windows') | ternary(omit, '0640') }}"
+  notify: Restart nomad
+
+- name: Write Nomad Enterprise license file
+  ansible.builtin.copy:
+    content: "{{ nomad_license }}"
+    dest: "{{ nomad_config_dir }}/license.hclic"
+    owner: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
+    group: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
+    mode: "{{ (ansible_os_family == 'Windows') | ternary(omit, '0640') }}"
+  when: nomad_license | length > 0
+  notify: Restart nomad

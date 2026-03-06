@@ -1,0 +1,8 @@
+datacenter = "{{ nomad_datacenter }}"
+region     = "{{ nomad_region }}"
+data_dir   = "{{ nomad_data_dir }}"
+
+client {
+  enabled = true
+  servers = ["{{ nomad_server_address }}:4647"]
+}

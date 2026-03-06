@@ -1,0 +1,14 @@
+---
+- name: Restart nomad service
+  ansible.builtin.service:
+    name: nomad
+    state: restarted
+  listen: Restart nomad
+  when: ansible_os_family != "Windows"
+
+- name: Restart nomad service (Windows)
+  ansible.windows.win_service:
+    name: nomad
+    state: restarted
+  listen: Restart nomad
+  when: ansible_os_family == "Windows"
