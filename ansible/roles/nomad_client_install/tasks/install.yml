@@ -13,15 +13,23 @@
 
 # --- Package manager (Debian) ---
 
-- name: Add HashiCorp GPG key (Debian)
-  ansible.builtin.apt_key:
+- name: Download HashiCorp GPG key (Debian)
+  ansible.builtin.get_url:
     url: https://apt.releases.hashicorp.com/gpg
-    state: present
+    dest: /tmp/hashicorp.gpg.key
+    mode: "0644"
   when: ansible_os_family == "Debian"
 
-- name: Add HashiCorp apt repository
+- name: Install HashiCorp GPG key to keyring (Debian)
+  ansible.builtin.command:
+    cmd: gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg /tmp/hashicorp.gpg.key
+    creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  when: ansible_os_family == "Debian"
+
+- name: Add HashiCorp apt repository (Debian)
   ansible.builtin.apt_repository:
-    repo: "deb https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    filename: hashicorp
     state: present
   when: ansible_os_family == "Debian"
 
