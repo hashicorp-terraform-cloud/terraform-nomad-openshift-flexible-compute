@@ -89,9 +89,5 @@ resource "terraform_data" "nomad_client_lifecycle" {
       events  = [after_create, after_update]
       actions = [action.aap_job_launch.install_nomad_clients]
     }
-    action_trigger {
-      events  = [before_destroy]
-      actions = [action.aap_job_launch.remove_nomad_clients]
-    }
   }
 }
