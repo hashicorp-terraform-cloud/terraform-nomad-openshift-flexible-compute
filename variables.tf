@@ -19,13 +19,11 @@ variable "namespace" {
 variable "load_balancer_ip" {
   type        = string
   description = "Static IP address for the LoadBalancer service. Also used as the Nomad advertise address."
-  default     = ""
 }
 
 variable "license" {
   type        = string
   description = "Nomad Enterprise license string."
-  sensitive   = true
 }
 
 variable "replica_count" {
