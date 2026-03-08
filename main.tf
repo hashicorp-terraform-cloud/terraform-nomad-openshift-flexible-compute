@@ -1,4 +1,6 @@
-provider "helm" {}
+provider "helm" {
+  kubernetes = {}
+}
 
 provider "aap" {}
 
