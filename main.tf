@@ -61,19 +61,19 @@ resource "aap_host" "nomad_client" {
 
 action "aap_job_launch" "install_nomad_clients" {
   config {
-    job_template_id                    = var.aap_install_job_template_id
-    inventory_id                       = aap_inventory.nomad_clients.id
-    extra_vars                         = jsonencode({ nomad_server_address = var.load_balancer_ip, nomad_datacenter = var.namespace })
-    wait_for_completion                = true
+    job_template_id                     = var.aap_install_job_template_id
+    inventory_id                        = aap_inventory.nomad_clients.id
+    extra_vars                          = jsonencode({ nomad_server_address = var.load_balancer_ip, nomad_datacenter = var.namespace })
+    wait_for_completion                 = true
     wait_for_completion_timeout_seconds = 600
   }
 }
 
 action "aap_job_launch" "remove_nomad_clients" {
   config {
-    job_template_id                    = var.aap_remove_job_template_id
-    inventory_id                       = aap_inventory.nomad_clients.id
-    wait_for_completion                = true
+    job_template_id                     = var.aap_remove_job_template_id
+    inventory_id                        = aap_inventory.nomad_clients.id
+    wait_for_completion                 = true
     wait_for_completion_timeout_seconds = 600
   }
 }
