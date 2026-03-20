@@ -28,14 +28,17 @@
 
 - name: Add HashiCorp apt repository (Debian)
   ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
+      https://apt.releases.hashicorp.com
+      {{ ansible_distribution_release }} main
     filename: hashicorp
     state: present
   when: ansible_os_family == "Debian"
 
 - name: Install Nomad Enterprise package
   ansible.builtin.package:
-    name: "{{ nomad_package }}"
+    name: "{{ nomad_client_install_package }}"
     state: present
   when: ansible_os_family in ["RedHat", "Debian"]
 
@@ -65,8 +68,8 @@
 
 - name: Download and extract Nomad Enterprise binary
   ansible.builtin.unarchive:
-    src: "https://releases.hashicorp.com/nomad/{{ nomad_version }}/nomad_{{ nomad_version }}_{{ ansible_system | lower }}_{{ nomad_arch_map[ansible_architecture] | default('amd64') }}.zip"
-    dest: "{{ nomad_install_dir }}"
+    src: "{{ nomad_client_install_download_url }}"
+    dest: "{{ nomad_client_install_install_dir }}"
     remote_src: true
     mode: "0755"
   when:
@@ -75,7 +78,7 @@
 
 - name: Create Nomad configuration directory
   ansible.builtin.file:
-    path: "{{ nomad_config_dir }}"
+    path: "{{ nomad_client_install_config_dir }}"
     state: directory
     owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
     group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
@@ -84,29 +87,36 @@
     - ansible_os_family not in ["RedHat", "Debian"]
     - ansible_os_family != "Windows"
 
+- name: Create Nomad log directory (macOS)
+  ansible.builtin.file:
+    path: /var/log/nomad
+    state: directory
+    mode: "0755"
+  when: ansible_system == "Darwin"
+
 # --- Direct download binary (Windows) ---
 
 - name: Create Nomad install directory (Windows)
   ansible.windows.win_file:
-    path: "{{ nomad_install_dir }}"
+    path: "{{ nomad_client_install_install_dir }}"
     state: directory
   when: ansible_os_family == "Windows"
 
 - name: Download Nomad Enterprise archive (Windows)
   ansible.windows.win_get_url:
-    url: "https://releases.hashicorp.com/nomad/{{ nomad_version }}/nomad_{{ nomad_version }}_windows_{{ nomad_arch_map[ansible_architecture] | default('amd64') }}.zip"
-    dest: "{{ nomad_install_dir }}\\nomad.zip"
+    url: "{{ nomad_client_install_windows_download_url }}"
+    dest: "{{ nomad_client_install_install_dir }}\\nomad.zip"
   when: ansible_os_family == "Windows"
 
 - name: Extract Nomad Enterprise binary (Windows)
   ansible.windows.win_shell: |
-    Expand-Archive -Path "{{ nomad_install_dir }}\nomad.zip" -DestinationPath "{{ nomad_install_dir }}" -Force
-    Remove-Item "{{ nomad_install_dir }}\nomad.zip"
+    Expand-Archive -Path "{{ nomad_client_install_install_dir }}\nomad.zip" -DestinationPath "{{ nomad_client_install_install_dir }}" -Force
+    Remove-Item "{{ nomad_client_install_install_dir }}\nomad.zip"
   when: ansible_os_family == "Windows"
 
 - name: Create Nomad configuration directory (Windows)
   ansible.windows.win_file:
-    path: "{{ nomad_config_dir }}"
+    path: "{{ nomad_client_install_config_dir }}"
     state: directory
   when: ansible_os_family == "Windows"
 
@@ -133,7 +143,7 @@
 - name: Install Nomad launchd plist
   ansible.builtin.template:
     src: com.hashicorp.nomad.plist.j2
-    dest: /Library/LaunchDaemons/com.hashicorp.nomad.plist
+    dest: "{{ nomad_client_install_launchd_plist_path }}"
     mode: "0644"
   when: ansible_system == "Darwin"
 
@@ -141,8 +151,8 @@
 
 - name: Create Nomad Windows service
   ansible.windows.win_service:
-    name: nomad
-    path: '"{{ nomad_install_dir }}\nomad.exe" agent -config "{{ nomad_config_dir }}"'
+    name: "{{ nomad_client_install_service_name }}"
+    path: '"{{ nomad_client_install_install_dir }}\nomad.exe" agent -config "{{ nomad_client_install_config_dir }}"'
     start_mode: auto
     state: stopped
   when: ansible_os_family == "Windows"

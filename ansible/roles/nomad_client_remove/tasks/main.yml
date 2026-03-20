@@ -1,25 +1,38 @@
 ---
-- name: Stop Nomad service
+- name: Stop Nomad service (Linux)
   ansible.builtin.service:
-    name: nomad
+    name: "{{ nomad_client_remove_service_name }}"
     state: stopped
     enabled: false
-  ignore_errors: true
-  when: ansible_os_family != "Windows"
+  register: nomad_client_remove_stop_service_linux
+  failed_when: false
+  when: ansible_system == "Linux"
+
+- name: Stop Nomad service (macOS)
+  ansible.builtin.shell: |
+    if launchctl print system/{{ nomad_client_remove_launchd_label }} >/dev/null 2>&1; then
+      launchctl bootout system/{{ nomad_client_remove_launchd_label }}
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+  failed_when: false
+  when: ansible_system == "Darwin"
 
 - name: Stop Nomad service (Windows)
   ansible.windows.win_service:
-    name: nomad
+    name: "{{ nomad_client_remove_service_name }}"
     state: stopped
     start_mode: disabled
-  ignore_errors: true
+  register: nomad_client_remove_stop_service_windows
+  failed_when: false
   when: ansible_os_family == "Windows"
 
 # --- Package manager removal (RedHat / Debian) ---
 
 - name: Remove Nomad Enterprise package
   ansible.builtin.package:
-    name: "{{ nomad_package }}"
+    name: "{{ nomad_client_remove_package }}"
     state: absent
   when: ansible_os_family in ["RedHat", "Debian"]
 
@@ -45,7 +58,7 @@
 
 - name: Remove Nomad binary
   ansible.builtin.file:
-    path: "{{ nomad_install_dir }}/nomad"
+    path: "{{ nomad_client_remove_install_dir }}/nomad"
     state: absent
   when:
     - ansible_system in ["Linux", "Darwin"]
@@ -70,7 +83,7 @@
 
 - name: Remove Nomad launchd plist
   ansible.builtin.file:
-    path: /Library/LaunchDaemons/com.hashicorp.nomad.plist
+    path: "{{ nomad_client_remove_launchd_plist_path }}"
     state: absent
   when: ansible_system == "Darwin"
 
@@ -78,13 +91,13 @@
 
 - name: Remove Nomad Windows service
   ansible.windows.win_service:
-    name: nomad
+    name: "{{ nomad_client_remove_service_name }}"
     state: absent
   when: ansible_os_family == "Windows"
 
 - name: Remove Nomad binary (Windows)
   ansible.windows.win_file:
-    path: "{{ nomad_install_dir }}\\nomad.exe"
+    path: "{{ nomad_client_remove_install_dir }}\\nomad.exe"
     state: absent
   when: ansible_os_family == "Windows"
 
@@ -92,24 +105,36 @@
 
 - name: Remove Nomad configuration directory
   ansible.builtin.file:
-    path: "{{ nomad_config_dir }}"
+    path: "{{ nomad_client_remove_config_dir }}"
+    state: absent
+  when: ansible_os_family != "Windows"
+
+- name: Remove Nomad state directory
+  ansible.builtin.file:
+    path: "{{ nomad_client_remove_state_dir }}"
     state: absent
   when: ansible_os_family != "Windows"
 
 - name: Remove Nomad data directory
   ansible.builtin.file:
-    path: "{{ nomad_data_dir }}"
+    path: "{{ nomad_client_remove_data_dir }}"
     state: absent
   when: ansible_os_family != "Windows"
 
 - name: Remove Nomad configuration directory (Windows)
   ansible.windows.win_file:
-    path: "{{ nomad_config_dir }}"
+    path: "{{ nomad_client_remove_config_dir }}"
+    state: absent
+  when: ansible_os_family == "Windows"
+
+- name: Remove Nomad state directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_client_remove_state_dir }}"
     state: absent
   when: ansible_os_family == "Windows"
 
 - name: Remove Nomad data directory (Windows)
   ansible.windows.win_file:
-    path: "{{ nomad_data_dir }}"
+    path: "{{ nomad_client_remove_data_dir }}"
     state: absent
   when: ansible_os_family == "Windows"

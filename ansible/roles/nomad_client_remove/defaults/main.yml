@@ -1,5 +1,46 @@
 ---
-nomad_package: "nomad-enterprise"
-nomad_install_dir: "/usr/local/bin"
-nomad_data_dir: "/opt/nomad"
-nomad_config_dir: "/etc/nomad.d"
+nomad_client_remove_package: "{{ nomad_package | default('nomad-enterprise') }}"
+
+nomad_client_remove_install_dir_linux: "{{ nomad_install_dir_linux | default('/usr/local/bin') }}"
+nomad_client_remove_install_dir_macos: "{{ nomad_install_dir_macos | default('/usr/local/bin') }}"
+nomad_client_remove_install_dir_windows: "{{ nomad_install_dir_windows | default('C:\\Program Files\\Nomad') }}"
+
+nomad_client_remove_config_dir_linux: "{{ nomad_config_dir_linux | default('/etc/nomad.d') }}"
+nomad_client_remove_config_dir_macos: "{{ nomad_config_dir_macos | default('/etc/nomad.d') }}"
+nomad_client_remove_config_dir_windows: "{{ nomad_config_dir_windows | default('C:\\ProgramData\\Nomad\\config') }}"
+
+nomad_client_remove_data_dir_linux: "{{ nomad_data_dir_linux | default('/opt/nomad') }}"
+nomad_client_remove_data_dir_macos: "{{ nomad_data_dir_macos | default('/opt/nomad') }}"
+nomad_client_remove_data_dir_windows: "{{ nomad_data_dir_windows | default('C:\\ProgramData\\Nomad\\data') }}"
+
+nomad_client_remove_state_dir_linux: "{{ nomad_state_dir_linux | default(nomad_client_remove_data_dir_linux ~ '/client') }}"
+nomad_client_remove_state_dir_macos: "{{ nomad_state_dir_macos | default(nomad_client_remove_data_dir_macos ~ '/client') }}"
+nomad_client_remove_state_dir_windows: '{{ nomad_state_dir_windows | default([nomad_client_remove_data_dir_windows, "client"] | join("\\")) }}'
+
+nomad_client_remove_platform_install_dir: >-
+  {{ nomad_client_remove_install_dir_windows if (ansible_os_family | default('')) == 'Windows'
+  else (nomad_client_remove_install_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_remove_install_dir_linux) }}
+
+nomad_client_remove_install_dir: "{{ nomad_install_dir | default(nomad_client_remove_platform_install_dir) }}"
+
+nomad_client_remove_platform_config_dir: >-
+  {{ nomad_client_remove_config_dir_windows if (ansible_os_family | default('')) == 'Windows'
+  else (nomad_client_remove_config_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_remove_config_dir_linux) }}
+
+nomad_client_remove_config_dir: "{{ nomad_config_dir | default(nomad_client_remove_platform_config_dir) }}"
+
+nomad_client_remove_platform_data_dir: >-
+  {{ nomad_client_remove_data_dir_windows if (ansible_os_family | default('')) == 'Windows'
+  else (nomad_client_remove_data_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_remove_data_dir_linux) }}
+
+nomad_client_remove_data_dir: "{{ nomad_data_dir | default(nomad_client_remove_platform_data_dir) }}"
+
+nomad_client_remove_platform_state_dir: >-
+  {{ nomad_client_remove_state_dir_windows if (ansible_os_family | default('')) == 'Windows'
+  else (nomad_client_remove_state_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_remove_state_dir_linux) }}
+
+nomad_client_remove_state_dir: "{{ nomad_state_dir | default(nomad_client_remove_platform_state_dir) }}"
+
+nomad_client_remove_service_name: "{{ nomad_service_name | default('nomad') }}"
+nomad_client_remove_launchd_label: "{{ nomad_launchd_label | default('com.hashicorp.nomad') }}"
+nomad_client_remove_launchd_plist_path: "{{ nomad_launchd_plist_path | default('/Library/LaunchDaemons/com.hashicorp.nomad.plist') }}"

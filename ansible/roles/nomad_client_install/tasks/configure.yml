@@ -1,27 +1,109 @@
 ---
-- name: Create Nomad data directory
+- name: Create Nomad data directory (POSIX)
   ansible.builtin.file:
-    path: "{{ nomad_data_dir }}"
+    path: "{{ nomad_client_install_data_dir }}"
     state: directory
-    owner: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
-    group: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
-    mode: "{{ (ansible_os_family == 'Windows') | ternary(omit, '0750') }}"
+    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0750"
+  when: ansible_os_family != "Windows"
 
-- name: Template Nomad client configuration
+- name: Create Nomad data directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_client_install_data_dir }}"
+    state: directory
+  when: ansible_os_family == "Windows"
+
+- name: Create Nomad client state directory (POSIX)
+  ansible.builtin.file:
+    path: "{{ nomad_client_install_state_dir }}"
+    state: directory
+    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0750"
+  when: ansible_os_family != "Windows"
+
+- name: Create Nomad client state directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_client_install_state_dir }}"
+    state: directory
+  when: ansible_os_family == "Windows"
+
+- name: Template Nomad client configuration (POSIX)
   ansible.builtin.template:
     src: nomad.hcl.j2
-    dest: "{{ nomad_config_dir }}/nomad.hcl"
-    owner: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
-    group: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
-    mode: "{{ (ansible_os_family == 'Windows') | ternary(omit, '0640') }}"
+    dest: "{{ nomad_client_install_config_dir }}/nomad.hcl"
+    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0640"
+  when: ansible_os_family != "Windows"
   notify: Restart nomad
 
-- name: Write Nomad Enterprise license file
+- name: Template Nomad client configuration (Windows)
+  ansible.windows.win_template:
+    src: nomad.hcl.j2
+    dest: "{{ nomad_client_install_config_dir }}\\nomad.hcl"
+  when: ansible_os_family == "Windows"
+  notify: Restart nomad
+
+- name: Write Nomad client introduction token file (POSIX)
   ansible.builtin.copy:
-    content: "{{ nomad_license }}"
-    dest: "{{ nomad_config_dir }}/license.hclic"
-    owner: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
-    group: "{{ (ansible_os_family == 'Windows') | ternary(omit, 'nomad') }}"
-    mode: "{{ (ansible_os_family == 'Windows') | ternary(omit, '0640') }}"
-  when: nomad_license | length > 0
+    content: "{{ nomad_client_install_intro_token }}"
+    dest: "{{ nomad_client_install_state_dir }}/intro_token.jwt"
+    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0600"
+  when:
+    - ansible_os_family != "Windows"
+    - nomad_client_install_intro_token | length > 0
+  no_log: true
+  notify: Restart nomad
+
+- name: Remove Nomad client introduction token file (POSIX)
+  ansible.builtin.file:
+    path: "{{ nomad_client_install_state_dir }}/intro_token.jwt"
+    state: absent
+  when:
+    - ansible_os_family != "Windows"
+    - nomad_client_install_intro_token | length == 0
+  notify: Restart nomad
+
+- name: Write Nomad client introduction token file (Windows)
+  ansible.windows.win_copy:
+    content: "{{ nomad_client_install_intro_token }}"
+    dest: "{{ nomad_client_install_state_dir }}\\intro_token.jwt"
+  when:
+    - ansible_os_family == "Windows"
+    - nomad_client_install_intro_token | length > 0
+  no_log: true
+  notify: Restart nomad
+
+- name: Remove Nomad client introduction token file (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_client_install_state_dir }}\\intro_token.jwt"
+    state: absent
+  when:
+    - ansible_os_family == "Windows"
+    - nomad_client_install_intro_token | length == 0
+  notify: Restart nomad
+
+- name: Write Nomad Enterprise license file (POSIX)
+  ansible.builtin.copy:
+    content: "{{ nomad_client_install_license }}"
+    dest: "{{ nomad_client_install_config_dir }}/license.hclic"
+    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0640"
+  when:
+    - ansible_os_family != "Windows"
+    - nomad_client_install_license | length > 0
+  notify: Restart nomad
+
+- name: Write Nomad Enterprise license file (Windows)
+  ansible.windows.win_copy:
+    content: "{{ nomad_client_install_license }}"
+    dest: "{{ nomad_client_install_config_dir }}\\license.hclic"
+  when:
+    - ansible_os_family == "Windows"
+    - nomad_client_install_license | length > 0
   notify: Restart nomad

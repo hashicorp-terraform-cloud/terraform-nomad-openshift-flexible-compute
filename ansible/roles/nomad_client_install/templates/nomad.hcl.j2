@@ -1,8 +1,9 @@
-datacenter = "{{ nomad_datacenter }}"
-region     = "{{ nomad_region }}"
-data_dir   = "{{ nomad_data_dir }}"
+datacenter = "{{ nomad_client_install_datacenter }}"
+region     = "{{ nomad_client_install_region }}"
+data_dir   = "{{ nomad_client_install_data_dir | replace('\\', '/') }}"
 
 client {
-  enabled = true
-  servers = ["{{ nomad_server_address }}:4647"]
+  enabled   = true
+  state_dir = "{{ nomad_client_install_state_dir | replace('\\', '/') }}"
+  servers   = ["{{ nomad_client_install_server_address }}:4647"]
 }

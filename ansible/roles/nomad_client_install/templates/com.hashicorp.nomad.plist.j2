@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.hashicorp.nomad</string>
+    <string>{{ nomad_client_install_launchd_label }}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{{ nomad_install_dir }}/nomad</string>
+        <string>{{ nomad_client_install_install_dir }}/nomad</string>
         <string>agent</string>
         <string>-config</string>
-        <string>{{ nomad_config_dir }}</string>
+        <string>{{ nomad_client_install_config_dir }}</string>
     </array>
     <key>RunAtLoad</key>
     <true/>

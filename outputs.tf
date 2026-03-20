@@ -1,26 +1,26 @@
 output "release_name" {
   description = "Name of the Helm release."
-  value       = helm_release.nomad_enterprise.name
+  value       = try(helm_release.nomad_enterprise[0].name, null)
 }
 
 output "namespace" {
   description = "Kubernetes namespace where Nomad Enterprise is deployed."
-  value       = helm_release.nomad_enterprise.namespace
+  value       = try(helm_release.nomad_enterprise[0].namespace, null)
 }
 
 output "status" {
   description = "Status of the Helm release."
-  value       = helm_release.nomad_enterprise.status
+  value       = try(helm_release.nomad_enterprise[0].status, null)
 }
 
 output "chart_version" {
   description = "Version of the deployed Helm chart."
-  value       = helm_release.nomad_enterprise.metadata.version
+  value       = try(helm_release.nomad_enterprise[0].metadata.version, null)
 }
 
 output "app_version" {
   description = "Application version of Nomad Enterprise."
-  value       = helm_release.nomad_enterprise.metadata.app_version
+  value       = try(helm_release.nomad_enterprise[0].metadata.app_version, null)
 }
 
 # --- AAP ---
