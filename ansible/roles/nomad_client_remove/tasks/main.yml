@@ -1,4 +1,190 @@
 ---
+- name: Build Nomad CLI environment for remove workflow
+  ansible.builtin.set_fact:
+    nomad_client_remove_nomad_env: >-
+      {{
+        {}
+        | combine(
+            (nomad_client_remove_nomad_addr | trim | length > 0)
+            | ternary({'NOMAD_ADDR': nomad_client_remove_nomad_addr | trim}, {})
+          )
+        | combine(
+            (nomad_client_remove_nomad_token | trim | length > 0)
+            | ternary({'NOMAD_TOKEN': nomad_client_remove_nomad_token | trim}, {})
+          )
+      }}
+  when: nomad_client_remove_drain_before_uninstall | bool
+
+- name: Disable node eligibility before uninstall (POSIX)
+  ansible.builtin.command:
+    argv:
+      - nomad
+      - node
+      - eligibility
+      - -disable
+      - -self
+  environment: "{{ nomad_client_remove_nomad_env }}"
+  changed_when: true
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_system in ["Linux", "Darwin"]
+
+- name: Drain node before uninstall (POSIX)
+  ansible.builtin.command: >-
+    nomad node drain -enable -deadline={{ nomad_client_remove_drain_deadline }}
+    {% if nomad_client_remove_drain_force | bool %}-force{% endif %}
+    -self
+  environment: "{{ nomad_client_remove_nomad_env }}"
+  changed_when: true
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_system in ["Linux", "Darwin"]
+
+- name: Disable node eligibility before uninstall (Windows)
+  ansible.windows.win_shell: |
+    $env:NOMAD_ADDR = "{{ nomad_client_remove_nomad_env.NOMAD_ADDR | default('') }}"
+    $env:NOMAD_TOKEN = "{{ nomad_client_remove_nomad_env.NOMAD_TOKEN | default('') }}"
+    & "{{ nomad_client_remove_install_dir }}\nomad.exe" node eligibility -disable -self
+  changed_when: true
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_os_family == "Windows"
+
+- name: Drain node before uninstall (Windows)
+  ansible.windows.win_shell: |
+    $env:NOMAD_ADDR = "{{ nomad_client_remove_nomad_env.NOMAD_ADDR | default('') }}"
+    $env:NOMAD_TOKEN = "{{ nomad_client_remove_nomad_env.NOMAD_TOKEN | default('') }}"
+    $drainArgs = @(
+      'node', 'drain',
+      '-enable',
+      '-deadline={{ nomad_client_remove_drain_deadline }}',
+      {% if nomad_client_remove_drain_force | bool %}'-force',{% endif %}
+      '-self'
+    )
+    & "{{ nomad_client_remove_install_dir }}\nomad.exe" @drainArgs
+  changed_when: true
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_os_family == "Windows"
+
+- name: Build Nomad API headers for allocation checks
+  ansible.builtin.set_fact:
+    nomad_client_remove_nomad_api_headers: >-
+      {{
+        {}
+        | combine(
+            (nomad_client_remove_nomad_token | trim | length > 0)
+            | ternary({'X-Nomad-Token': nomad_client_remove_nomad_token | trim}, {})
+          )
+      }}
+  when: nomad_client_remove_drain_before_uninstall | bool
+
+- name: Lookup self node ID (POSIX)
+  ansible.builtin.command:
+    argv:
+      - nomad
+      - node
+      - status
+      - -self
+      - -json
+  environment: "{{ nomad_client_remove_nomad_env }}"
+  register: nomad_client_remove_self_node_status_posix
+  changed_when: false
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_system in ["Linux", "Darwin"]
+
+- name: Query self node allocations (POSIX)
+  ansible.builtin.uri:
+    url: >-
+      {{
+        (nomad_client_remove_nomad_env.NOMAD_ADDR | default('http://127.0.0.1:4646'))
+        ~ '/v1/node/'
+        ~ ((nomad_client_remove_self_node_status_posix.stdout | from_json).ID)
+        ~ '/allocations'
+      }}
+    method: GET
+    headers: "{{ nomad_client_remove_nomad_api_headers }}"
+    return_content: true
+  register: nomad_client_remove_self_allocations_posix
+  changed_when: false
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_system in ["Linux", "Darwin"]
+
+- name: Fail when active allocations remain on self node (POSIX)
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          nomad_client_remove_self_allocations_posix.json
+          | rejectattr('ClientStatus', 'in', ['complete', 'failed', 'lost'])
+          | list
+          | length
+        ) == 0
+    fail_msg: >-
+      Active allocations remain on self node after drain.
+      Remaining allocation IDs: {{
+        nomad_client_remove_self_allocations_posix.json
+        | rejectattr('ClientStatus', 'in', ['complete', 'failed', 'lost'])
+        | map(attribute='ID')
+        | list
+      }}
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_system in ["Linux", "Darwin"]
+
+- name: Lookup self node ID (Windows)
+  ansible.windows.win_shell: |
+    $env:NOMAD_ADDR = "{{ nomad_client_remove_nomad_env.NOMAD_ADDR | default('') }}"
+    $env:NOMAD_TOKEN = "{{ nomad_client_remove_nomad_env.NOMAD_TOKEN | default('') }}"
+    $selfNode = & "{{ nomad_client_remove_install_dir }}\nomad.exe" node status -self -json
+    ($selfNode | ConvertFrom-Json).ID
+  register: nomad_client_remove_self_node_id_windows
+  changed_when: false
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_os_family == "Windows"
+
+- name: Query self node allocations (Windows)
+  ansible.windows.win_uri:
+    url: >-
+      {{
+        (nomad_client_remove_nomad_env.NOMAD_ADDR | default('http://127.0.0.1:4646'))
+        ~ '/v1/node/'
+        ~ (nomad_client_remove_self_node_id_windows.stdout | trim)
+        ~ '/allocations'
+      }}
+    method: GET
+    headers: "{{ nomad_client_remove_nomad_api_headers }}"
+  register: nomad_client_remove_self_allocations_windows
+  changed_when: false
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_os_family == "Windows"
+
+- name: Fail when active allocations remain on self node (Windows)
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          nomad_client_remove_self_allocations_windows.json
+          | rejectattr('ClientStatus', 'in', ['complete', 'failed', 'lost'])
+          | list
+          | length
+        ) == 0
+    fail_msg: >-
+      Active allocations remain on self node after drain.
+      Remaining allocation IDs: {{
+        nomad_client_remove_self_allocations_windows.json
+        | rejectattr('ClientStatus', 'in', ['complete', 'failed', 'lost'])
+        | map(attribute='ID')
+        | list
+      }}
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_os_family == "Windows"
+
 - name: Stop Nomad service (Linux)
   ansible.builtin.service:
     name: "{{ nomad_client_remove_service_name }}"

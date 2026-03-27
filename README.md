@@ -74,6 +74,18 @@ Attach these variable sets to the project where No Code workspaces will be creat
 
 The `ansible/` directory contains playbooks and roles for Nomad client lifecycle management, intended to be used as AAP job templates.
 
+### Drain and remove Nomad agent (`ansible/remove_nomad_client.yml`)
+
+- Runs the cross-platform `nomad_client_remove` role
+- Stops Nomad and removes client artifacts so workstations return to employee use during business hours
+- Matches the same host and privilege handling model as the existing install/remove playbooks
+
+### Nomad agent installation and bootstrapp (`ansible/install_nomad_client.yml`)
+
+- Runs the cross-platform `nomad_client_install` role as a dedicated preparation playbook
+- Installs or reconciles the Nomad client, refreshes configuration, and starts the service before overnight jobs
+- Supports Linux, macOS, and Windows through the existing role conditionals
+
 ### Install (`ansible/install_nomad_client.yml`)
 
 - Adds the HashiCorp package repository (yum for RedHat, apt for Debian)
@@ -96,10 +108,21 @@ Key variables (set via AAP extra vars or role defaults):
 
 ### Remove (`ansible/remove_nomad_client.yml`)
 
+- Drains each node before uninstall by disabling eligibility and enabling drain; uninstall does not proceed if drain fails
 - Stops Nomad using systemd (Linux), `launchd` (macOS), or Windows services
 - Removes the `nomad-enterprise` package on RedHat and Debian
 - Removes direct-download artifacts on Linux (non-package), macOS, and Windows
 - Cleans up configuration and data directories
+
+Key variables (set via AAP extra vars or role defaults):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `nomad_client_remove_drain_before_uninstall` | `true` | Require a successful drain before uninstalling Nomad |
+| `nomad_client_remove_drain_force` | `false` | Use forced drain (`-force`) |
+| `nomad_client_remove_drain_deadline` | `30m` | Drain deadline passed to `nomad node drain -deadline` |
+| `nomad_client_remove_nomad_addr` | `""` | Optional explicit Nomad API address (`NOMAD_ADDR`) |
+| `nomad_client_remove_nomad_token` | `""` | Optional ACL token used for drain operations (`NOMAD_TOKEN`) |
 
 ## Outputs
 
