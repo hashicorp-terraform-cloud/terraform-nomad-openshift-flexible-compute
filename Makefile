@@ -1,4 +1,4 @@
-.PHONY: check terraform-check terraform-fmt-check terraform-init terraform-validate tflint ansible-check ansible-lint e2e e2e-remove e2e-init e2e-ensure-tfvars e2e-plan e2e-apply e2e-generate-inventory e2e-wait-ready e2e-bootstrap-acl e2e-install e2e-assert-install e2e-run-test-jobs e2e-run-remove e2e-assert-remove e2e-destroy e2e-venv
+.PHONY: help check terraform-check terraform-fmt-check terraform-init terraform-validate tflint ansible-check ansible-lint e2e e2e-check e2e-terraform-check e2e-terraform-fmt-check e2e-terraform-init e2e-terraform-validate e2e-ansible-check e2e-remove e2e-init e2e-ensure-tfvars e2e-plan e2e-apply e2e-generate-inventory e2e-wait-ready e2e-bootstrap-acl e2e-install e2e-assert-install e2e-run-test-jobs e2e-run-remove e2e-assert-remove e2e-destroy e2e-venv
 
 E2E_TFVARS_FILE ?= e2e_tests/terraform.tfvars
 E2E_TFVARS_EXAMPLE ?= e2e_tests/terraform.tfvars.example
@@ -10,6 +10,30 @@ E2E_VENV_STAMP ?= $(E2E_VENV_DIR)/.e2e-requirements-stamp
 E2E_VENV_PATH_PREFIX = VIRTUAL_ENV="$(abspath $(E2E_VENV_DIR))" PATH="$(abspath $(E2E_VENV_BIN_DIR)):$$PATH"
 E2E_INVENTORY_FILE ?= e2e_tests/.artifacts/inventory.ini
 E2E_EXTRA_VARS_FILE ?= e2e_tests/.artifacts/extra_vars.yml
+
+help:
+	@printf '%s\n' \
+		'Available targets:' \
+		'  help                  Show this help output' \
+		'  check                 Run repository Terraform and Ansible checks' \
+		'  terraform-check       Run root Terraform fmt and validate checks' \
+		'  ansible-check         Run root Ansible syntax checks' \
+		'  ansible-lint          Run root Ansible lint checks' \
+		'  tflint                Run Terraform lint checks' \
+		'' \
+		'  e2e-check             Run non-destructive E2E Terraform and Ansible checks' \
+		'  e2e-init              Initialize the e2e_tests Terraform working directory' \
+		'  e2e-plan              Run Terraform plan for e2e_tests' \
+		'  e2e-apply             Apply e2e_tests infrastructure and generate inventory' \
+		'  e2e-bootstrap-acl     Bootstrap Nomad ACLs for the E2E Nomad server' \
+		'  e2e-install           Run the install playbook against E2E hosts' \
+		'  e2e-assert-install    Run E2E install assertions' \
+		'  e2e-run-test-jobs     Submit pre-remove Nomad test jobs' \
+		'  e2e-run-remove        Run the remove playbook against E2E hosts' \
+		'  e2e-assert-remove     Run E2E remove assertions' \
+		'  e2e-destroy           Destroy e2e_tests infrastructure' \
+		'  e2e-remove            Destroy e2e_tests artifacts and local Terraform state' \
+		'  e2e                  Apply infra and run install-side E2E flow'
 
 check: terraform-check tflint ansible-check ansible-lint
 
@@ -50,6 +74,26 @@ ansible-lint: e2e-venv
 e2e: e2e-init e2e-apply e2e-install e2e-assert-install e2e-run-test-jobs
 # e2e-run-remove e2e-assert-remove
 
+e2e-check: e2e-terraform-check e2e-ansible-check
+
+e2e-terraform-check: e2e-terraform-fmt-check e2e-terraform-validate
+
+e2e-terraform-fmt-check:
+	terraform -chdir=e2e_tests fmt -recursive
+
+e2e-terraform-init:
+	terraform -chdir=e2e_tests init -backend=false -input=false
+
+e2e-terraform-validate: e2e-terraform-init
+	terraform -chdir=e2e_tests validate
+
+e2e-ansible-check: e2e-venv
+	@tmp_inventory="$$(mktemp)"; \
+	printf '[nomad_clients]\nsyntax-host ansible_connection=local\n' > "$$tmp_inventory"; \
+	trap 'rm -f "$$tmp_inventory"' EXIT; \
+	$(E2E_VENV_PATH_PREFIX) ansible-playbook --inventory "$$tmp_inventory" --syntax-check e2e_tests/ansible/assert_install.yml; \
+	$(E2E_VENV_PATH_PREFIX) ansible-playbook --inventory "$$tmp_inventory" --syntax-check e2e_tests/ansible/assert_remove.yml
+
 e2e-remove:
 	-terraform -chdir=e2e_tests destroy -auto-approve
 	rm -rf e2e_tests/.artifacts
@@ -71,7 +115,7 @@ e2e-plan: e2e-ensure-tfvars
 	terraform -chdir=e2e_tests plan
 
 e2e-apply: e2e-ensure-tfvars
-	terraform -chdir=e2e_tests apply
+	terraform -chdir=e2e_tests apply --auto-approve
 	@$(MAKE) e2e-generate-inventory
 
 e2e-generate-inventory:
