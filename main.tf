@@ -7,10 +7,15 @@ provider "aap" {}
 locals {
   nomad_server_address      = var.deploy_nomad_cluster ? var.load_balancer_ip : var.existing_nomad_server_address
   client_introduction_token = trimspace(var.client_introduction_token)
+  nomad_client_edition      = lower(trimspace(var.nomad_client_edition))
+  nomad_client_package      = local.nomad_client_edition == "enterprise" ? "nomad-enterprise" : "nomad"
+  nomad_client_version      = local.nomad_client_edition == "enterprise" ? "1.11.3+ent" : "1.11.3"
   install_nomad_client_extra_vars = merge(
     {
       nomad_server_address                = local.nomad_server_address
       nomad_datacenter                    = var.namespace
+      nomad_edition                       = local.nomad_client_edition
+      nomad_version                       = local.nomad_client_version
       nomad_client_install_server_address = local.nomad_server_address
       nomad_client_install_datacenter     = var.namespace
     },
@@ -18,7 +23,16 @@ locals {
       nomad_client_intro_token         = local.client_introduction_token
       nomad_client_install_intro_token = local.client_introduction_token
     } : {},
+    length(trimspace(var.license)) > 0 ? {
+      nomad_license = var.license
+    } : {},
   )
+  remove_nomad_client_extra_vars = {
+    nomad_remove_delete_state = var.nomad_client_remove_delete_state
+    nomad_remove_purge_node   = var.nomad_client_remove_purge_node
+    nomad_edition             = local.nomad_client_edition
+    nomad_server_address      = local.nomad_server_address
+  }
 }
 
 resource "helm_release" "nomad_enterprise" {
@@ -91,6 +105,7 @@ action "aap_job_launch" "remove_nomad_clients" {
   config {
     job_template_id                     = var.aap_remove_job_template_id
     inventory_id                        = aap_inventory.nomad_clients.id
+    extra_vars                          = jsonencode(local.remove_nomad_client_extra_vars)
     wait_for_completion                 = true
     wait_for_completion_timeout_seconds = 600
   }
@@ -99,6 +114,10 @@ action "aap_job_launch" "remove_nomad_clients" {
 resource "terraform_data" "nomad_client_lifecycle" {
   input = {
     nomad_client_hosts               = var.nomad_client_hosts
+    nomad_client_edition             = local.nomad_client_edition
+    nomad_client_package             = local.nomad_client_package
+    nomad_client_version             = local.nomad_client_version
+    nomad_license_sha256             = nonsensitive(sha256(trimspace(var.license)))
     nomad_server_address             = local.nomad_server_address
     client_introduction_token_sha256 = nonsensitive(sha256(local.client_introduction_token))
   }

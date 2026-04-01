@@ -3,58 +3,88 @@
   ansible.builtin.file:
     path: "{{ nomad_client_install_data_dir }}"
     state: directory
-    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
-    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
     mode: "0750"
-  when: ansible_os_family != "Windows"
+  when: ansible_facts["os_family"] != "Windows"
 
 - name: Create Nomad data directory (Windows)
   ansible.windows.win_file:
     path: "{{ nomad_client_install_data_dir }}"
     state: directory
-  when: ansible_os_family == "Windows"
+  when: ansible_facts["os_family"] == "Windows"
 
 - name: Create Nomad client state directory (POSIX)
   ansible.builtin.file:
     path: "{{ nomad_client_install_state_dir }}"
     state: directory
-    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
-    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
     mode: "0750"
-  when: ansible_os_family != "Windows"
+  when: ansible_facts["os_family"] != "Windows"
 
 - name: Create Nomad client state directory (Windows)
   ansible.windows.win_file:
     path: "{{ nomad_client_install_state_dir }}"
     state: directory
-  when: ansible_os_family == "Windows"
+  when: ansible_facts["os_family"] == "Windows"
+
+- name: Create Nomad allocation directory (POSIX)
+  ansible.builtin.file:
+    path: "{{ nomad_client_install_alloc_dir }}"
+    state: directory
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0750"
+  when: ansible_facts["os_family"] != "Windows"
+
+- name: Create Nomad allocation directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_client_install_alloc_dir }}"
+    state: directory
+  when: ansible_facts["os_family"] == "Windows"
+
+- name: Create Nomad allocation mounts directory (POSIX)
+  ansible.builtin.file:
+    path: "{{ nomad_client_install_alloc_mounts_dir }}"
+    state: directory
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0750"
+  when: ansible_facts["os_family"] != "Windows"
+
+- name: Create Nomad allocation mounts directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_client_install_alloc_mounts_dir }}"
+    state: directory
+  when: ansible_facts["os_family"] == "Windows"
 
 - name: Template Nomad client configuration (POSIX)
   ansible.builtin.template:
     src: nomad.hcl.j2
     dest: "{{ nomad_client_install_config_dir }}/nomad.hcl"
-    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
-    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
     mode: "0640"
-  when: ansible_os_family != "Windows"
+  when: ansible_facts["os_family"] != "Windows"
   notify: Restart nomad
 
 - name: Template Nomad client configuration (Windows)
   ansible.windows.win_template:
     src: nomad.hcl.j2
     dest: "{{ nomad_client_install_config_dir }}\\nomad.hcl"
-  when: ansible_os_family == "Windows"
+  when: ansible_facts["os_family"] == "Windows"
   notify: Restart nomad
 
 - name: Write Nomad client introduction token file (POSIX)
   ansible.builtin.copy:
     content: "{{ nomad_client_install_intro_token }}"
     dest: "{{ nomad_client_install_state_dir }}/intro_token.jwt"
-    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
-    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
     mode: "0600"
   when:
-    - ansible_os_family != "Windows"
+    - ansible_facts["os_family"] != "Windows"
     - nomad_client_install_intro_token | length > 0
   no_log: true
   notify: Restart nomad
@@ -64,7 +94,7 @@
     path: "{{ nomad_client_install_state_dir }}/intro_token.jwt"
     state: absent
   when:
-    - ansible_os_family != "Windows"
+    - ansible_facts["os_family"] != "Windows"
     - nomad_client_install_intro_token | length == 0
   notify: Restart nomad
 
@@ -73,7 +103,7 @@
     content: "{{ nomad_client_install_intro_token }}"
     dest: "{{ nomad_client_install_state_dir }}\\intro_token.jwt"
   when:
-    - ansible_os_family == "Windows"
+    - ansible_facts["os_family"] == "Windows"
     - nomad_client_install_intro_token | length > 0
   no_log: true
   notify: Restart nomad
@@ -83,7 +113,7 @@
     path: "{{ nomad_client_install_state_dir }}\\intro_token.jwt"
     state: absent
   when:
-    - ansible_os_family == "Windows"
+    - ansible_facts["os_family"] == "Windows"
     - nomad_client_install_intro_token | length == 0
   notify: Restart nomad
 
@@ -91,12 +121,22 @@
   ansible.builtin.copy:
     content: "{{ nomad_client_install_license }}"
     dest: "{{ nomad_client_install_config_dir }}/license.hclic"
-    owner: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
-    group: "{{ (ansible_system == 'Linux') | ternary('nomad', omit) }}"
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
     mode: "0640"
   when:
-    - ansible_os_family != "Windows"
+    - ansible_facts["os_family"] != "Windows"
+    - nomad_client_install_edition == "enterprise"
     - nomad_client_install_license | length > 0
+  notify: Restart nomad
+
+- name: Remove Nomad Enterprise license file (POSIX)
+  ansible.builtin.file:
+    path: "{{ nomad_client_install_config_dir }}/license.hclic"
+    state: absent
+  when:
+    - ansible_facts["os_family"] != "Windows"
+    - nomad_client_install_edition != "enterprise" or nomad_client_install_license | length == 0
   notify: Restart nomad
 
 - name: Write Nomad Enterprise license file (Windows)
@@ -104,6 +144,16 @@
     content: "{{ nomad_client_install_license }}"
     dest: "{{ nomad_client_install_config_dir }}\\license.hclic"
   when:
-    - ansible_os_family == "Windows"
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_edition == "enterprise"
     - nomad_client_install_license | length > 0
+  notify: Restart nomad
+
+- name: Remove Nomad Enterprise license file (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_client_install_config_dir }}\\license.hclic"
+    state: absent
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_edition != "enterprise" or nomad_client_install_license | length == 0
   notify: Restart nomad

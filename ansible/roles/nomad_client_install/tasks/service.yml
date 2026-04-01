@@ -4,7 +4,7 @@
     name: "{{ nomad_client_install_service_name }}"
     state: started
     enabled: true
-  when: ansible_system == "Linux"
+  when: ansible_facts["system"] == "Linux"
 
 - name: Enable and start Nomad service (macOS)
   ansible.builtin.shell: |
@@ -16,11 +16,11 @@
   args:
     executable: /bin/bash
   changed_when: true
-  when: ansible_system == "Darwin"
+  when: ansible_facts["system"] == "Darwin"
 
 - name: Enable and start Nomad service (Windows)
   ansible.windows.win_service:
     name: "{{ nomad_client_install_service_name }}"
     state: started
     start_mode: auto
-  when: ansible_os_family == "Windows"
+  when: ansible_facts["os_family"] == "Windows"

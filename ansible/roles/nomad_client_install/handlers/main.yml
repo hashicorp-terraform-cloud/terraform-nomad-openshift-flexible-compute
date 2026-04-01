@@ -4,7 +4,7 @@
     name: "{{ nomad_client_install_service_name }}"
     state: restarted
   listen: Restart nomad
-  when: ansible_system == "Linux"
+  when: ansible_facts["system"] == "Linux"
 
 - name: Restart nomad service (macOS)
   ansible.builtin.shell: |
@@ -17,11 +17,11 @@
     executable: /bin/bash
   changed_when: true
   listen: Restart nomad
-  when: ansible_system == "Darwin"
+  when: ansible_facts["system"] == "Darwin"
 
 - name: Restart nomad service (Windows)
   ansible.windows.win_service:
     name: "{{ nomad_client_install_service_name }}"
     state: restarted
   listen: Restart nomad
-  when: ansible_os_family == "Windows"
+  when: ansible_facts["os_family"] == "Windows"

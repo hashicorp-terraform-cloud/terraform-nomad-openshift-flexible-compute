@@ -2,9 +2,16 @@
 # Required — passed from Terraform via AAP extra_vars
 nomad_client_install_server_address: "{{ nomad_server_address | default('') }}"
 
+# Edition
+nomad_client_install_edition: "{{ nomad_edition | default('community') }}"
+
 # Package
-nomad_client_install_package: "{{ nomad_package | default('nomad-enterprise') }}"
-nomad_client_install_version: "{{ nomad_version | default('1.11.3+ent') }}"
+nomad_client_install_package: >-
+  {{ 'nomad-enterprise' if (nomad_client_install_edition == 'enterprise') else 'nomad' }}
+nomad_client_install_version: >-
+  {{ nomad_version | default('1.11.3+ent' if (nomad_client_install_edition == 'enterprise') else '1.11.3') }}
+nomad_client_install_alternate_package: >-
+  {{ 'nomad' if (nomad_client_install_package == 'nomad-enterprise') else 'nomad-enterprise' }}
 
 # Direct download defaults by platform
 nomad_client_install_install_dir_linux: "{{ nomad_install_dir_linux | default('/usr/local/bin') }}"
@@ -23,29 +30,52 @@ nomad_client_install_state_dir_linux: "{{ nomad_state_dir_linux | default(nomad_
 nomad_client_install_state_dir_macos: "{{ nomad_state_dir_macos | default(nomad_client_install_data_dir_macos ~ '/client') }}"
 nomad_client_install_state_dir_windows: '{{ nomad_state_dir_windows | default([nomad_client_install_data_dir_windows, "client"] | join("\\")) }}'
 
+nomad_client_install_alloc_dir_linux: "{{ nomad_alloc_dir_linux | default(nomad_client_install_data_dir_linux ~ '/alloc') }}"
+nomad_client_install_alloc_dir_macos: "{{ nomad_alloc_dir_macos | default(nomad_client_install_data_dir_macos ~ '/alloc') }}"
+nomad_client_install_alloc_dir_windows: '{{ nomad_alloc_dir_windows | default([nomad_client_install_data_dir_windows, "alloc"] | join("\\")) }}'
+
+nomad_client_install_alloc_mounts_dir_linux: >-
+  {{ nomad_alloc_mounts_dir_linux | default(nomad_client_install_data_dir_linux ~ '/alloc_mounts') }}
+nomad_client_install_alloc_mounts_dir_macos: >-
+  {{ nomad_alloc_mounts_dir_macos | default(nomad_client_install_data_dir_macos ~ '/alloc_mounts') }}
+nomad_client_install_alloc_mounts_dir_windows: >-
+  {{ nomad_alloc_mounts_dir_windows | default([nomad_client_install_data_dir_windows, "alloc_mounts"] | join("\\")) }}
+
 nomad_client_install_platform_install_dir: >-
-  {{ nomad_client_install_install_dir_windows if (ansible_os_family | default('')) == 'Windows'
-  else (nomad_client_install_install_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_install_install_dir_linux) }}
+  {{ nomad_client_install_install_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_install_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_install_dir_linux) }}
 
 nomad_client_install_install_dir: "{{ nomad_install_dir | default(nomad_client_install_platform_install_dir) }}"
 
 nomad_client_install_platform_config_dir: >-
-  {{ nomad_client_install_config_dir_windows if (ansible_os_family | default('')) == 'Windows'
-  else (nomad_client_install_config_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_install_config_dir_linux) }}
+  {{ nomad_client_install_config_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_config_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_config_dir_linux) }}
 
 nomad_client_install_config_dir: "{{ nomad_config_dir | default(nomad_client_install_platform_config_dir) }}"
 
 nomad_client_install_platform_data_dir: >-
-  {{ nomad_client_install_data_dir_windows if (ansible_os_family | default('')) == 'Windows'
-  else (nomad_client_install_data_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_install_data_dir_linux) }}
+  {{ nomad_client_install_data_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_data_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_data_dir_linux) }}
 
 nomad_client_install_data_dir: "{{ nomad_data_dir | default(nomad_client_install_platform_data_dir) }}"
 
 nomad_client_install_platform_state_dir: >-
-  {{ nomad_client_install_state_dir_windows if (ansible_os_family | default('')) == 'Windows'
-  else (nomad_client_install_state_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_install_state_dir_linux) }}
+  {{ nomad_client_install_state_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_state_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_state_dir_linux) }}
 
 nomad_client_install_state_dir: "{{ nomad_state_dir | default(nomad_client_install_platform_state_dir) }}"
+
+nomad_client_install_platform_alloc_dir: >-
+  {{ nomad_client_install_alloc_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_alloc_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_alloc_dir_linux) }}
+
+nomad_client_install_alloc_dir: "{{ nomad_alloc_dir | default(nomad_client_install_platform_alloc_dir) }}"
+
+nomad_client_install_platform_alloc_mounts_dir: >-
+  {{ nomad_client_install_alloc_mounts_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_alloc_mounts_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_alloc_mounts_dir_linux) }}
+
+nomad_client_install_alloc_mounts_dir: "{{ nomad_alloc_mounts_dir | default(nomad_client_install_platform_alloc_mounts_dir) }}"
 
 nomad_client_install_service_name: "{{ nomad_service_name | default('nomad') }}"
 nomad_client_install_launchd_label: "{{ nomad_launchd_label | default('com.hashicorp.nomad') }}"
@@ -66,9 +96,9 @@ nomad_client_install_download_url: >-
     'nomad_' ~
     nomad_client_install_version ~
     '_' ~
-    (ansible_system | lower) ~
+    (ansible_facts.get('system', '') | lower) ~
     '_' ~
-    (nomad_client_install_arch_map[ansible_architecture] | default('amd64')) ~
+    (nomad_client_install_arch_map[ansible_facts.get('architecture', '')] | default('amd64')) ~
     '.zip'
   ] | join('/') }}
 
@@ -79,7 +109,7 @@ nomad_client_install_windows_download_url: >-
     'nomad_' ~
     nomad_client_install_version ~
     '_windows_' ~
-    (nomad_client_install_arch_map[ansible_architecture] | default('amd64')) ~
+    (nomad_client_install_arch_map[ansible_facts.get('architecture', '')] | default('amd64')) ~
     '.zip'
   ] | join('/') }}
 

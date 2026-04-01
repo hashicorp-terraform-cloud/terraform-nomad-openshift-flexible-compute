@@ -51,6 +51,24 @@ variable "client_introduction_token" {
   sensitive   = true
 }
 
+variable "nomad_client_edition" {
+  type        = string
+  description = "Nomad client edition to install via Ansible (community or enterprise)."
+  default     = "community"
+
+  validation {
+    condition     = contains(["community", "enterprise"], lower(trimspace(var.nomad_client_edition)))
+    error_message = "nomad_client_edition must be either 'community' or 'enterprise'."
+  }
+  validation {
+    condition = (
+      lower(trimspace(var.nomad_client_edition)) != "enterprise"
+      || length(trimspace(var.license)) > 0
+    )
+    error_message = "license must be set when nomad_client_edition is enterprise."
+  }
+}
+
 variable "license" {
   type        = string
   description = "Nomad Enterprise license string."
@@ -106,4 +124,16 @@ variable "aap_organization" {
   type        = number
   description = "AAP organization ID for the Nomad client inventory."
   default     = 1
+}
+
+variable "nomad_client_remove_delete_state" {
+  type        = bool
+  description = "Whether remove workflow deletes Nomad client state/data directories (including the client node ID)."
+  default     = true
+}
+
+variable "nomad_client_remove_purge_node" {
+  type        = bool
+  description = "Whether remove workflow purges the node from Nomad after uninstall. Recommended when nomad_client_remove_delete_state is true."
+  default     = false
 }
