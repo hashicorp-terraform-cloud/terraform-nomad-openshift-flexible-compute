@@ -8,7 +8,6 @@ locals {
   nomad_server_address      = var.deploy_nomad_cluster ? var.load_balancer_ip : var.existing_nomad_server_address
   client_introduction_token = trimspace(var.client_introduction_token)
   nomad_client_edition      = lower(trimspace(var.nomad_client_edition))
-  nomad_client_package      = local.nomad_client_edition == "enterprise" ? "nomad-enterprise" : "nomad"
   nomad_client_version      = local.nomad_client_edition == "enterprise" ? "1.11.3+ent" : "1.11.3"
   install_nomad_client_extra_vars = merge(
     {
@@ -115,7 +114,6 @@ resource "terraform_data" "nomad_client_lifecycle" {
   input = {
     nomad_client_hosts               = var.nomad_client_hosts
     nomad_client_edition             = local.nomad_client_edition
-    nomad_client_package             = local.nomad_client_package
     nomad_client_version             = local.nomad_client_version
     nomad_license_sha256             = nonsensitive(sha256(trimspace(var.license)))
     nomad_server_address             = local.nomad_server_address
