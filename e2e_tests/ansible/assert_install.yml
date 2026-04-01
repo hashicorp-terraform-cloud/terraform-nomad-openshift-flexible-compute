@@ -1,0 +1,206 @@
+---
+- name: Assert Nomad client install state
+  hosts: nomad_clients
+  gather_facts: true
+  become: "{{ (ansible_connection | default('ssh')) not in ['winrm', 'psrp'] }}"
+  vars:
+    nomad_intro_token_expected: "{{ (nomad_client_intro_token | default('') | trim | length) > 0 }}"
+    nomad_enterprise_expected: "{{ (nomad_edition | default('community') | lower) == 'enterprise' }}"
+    nomad_license_expected: "{{ nomad_enterprise_expected and ((nomad_license | default('') | trim | length) > 0) }}"
+
+  tasks:
+    - name: Set expected Nomad paths
+      ansible.builtin.set_fact:
+        nomad_config_path: >-
+          {{ 'C:\\ProgramData\\Nomad\\config\\nomad.hcl' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/nomad.hcl' }}
+        nomad_license_path: >-
+          {{ 'C:\\ProgramData\\Nomad\\config\\license.hclic' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/license.hclic' }}
+        nomad_intro_token_path: >-
+          {{ 'C:\\ProgramData\\Nomad\\data\\client\\intro_token.jwt' if ansible_facts['os_family'] == 'Windows' else '/opt/nomad/client/intro_token.jwt' }}
+        nomad_binary_path_windows: "{{ 'C:\\Program Files\\Nomad\\nomad.exe' }}"
+
+    - name: Gather Linux service facts
+      ansible.builtin.service_facts:
+      when: ansible_facts['system'] == 'Linux'
+
+    - name: Assert Nomad service is running (Linux)
+      ansible.builtin.assert:
+        that:
+          - "'nomad.service' in ansible_facts.services"
+          - ansible_facts.services['nomad.service'].state == 'running'
+        fail_msg: "Nomad service is not running on Linux host."
+      when: ansible_facts['system'] == 'Linux'
+
+    - name: Assert Nomad launchd service is loaded (macOS)
+      ansible.builtin.shell: launchctl print system/com.hashicorp.nomad
+      args:
+        executable: /bin/bash
+      register: nomad_launchd_status
+      changed_when: false
+      failed_when: nomad_launchd_status.rc != 0
+      when: ansible_facts['system'] == 'Darwin'
+
+    - name: Gather Windows Nomad service details
+      ansible.windows.win_service_info:
+        name: nomad
+      register: nomad_service_windows
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Assert Nomad service is running (Windows)
+      ansible.builtin.assert:
+        that:
+          - nomad_service_windows.services | length > 0
+          - nomad_service_windows.services[0].state == 'started'
+        fail_msg: "Nomad service is not running on Windows host."
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Read Nomad version output (POSIX)
+      ansible.builtin.command:
+        argv:
+          - nomad
+          - version
+      register: nomad_version_posix
+      changed_when: false
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Assert Nomad edition marker (POSIX)
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              (nomad_version_posix.stdout | default('')) is search('\\+ent')
+            ) == nomad_enterprise_expected
+        fail_msg: >-
+          POSIX Nomad edition does not match expected value.
+          Expected enterprise={{ nomad_enterprise_expected }}, output={{ nomad_version_posix.stdout | default('') }}
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Read Nomad version output (Windows)
+      ansible.windows.win_shell: |
+        $nomad = Get-Command nomad.exe -ErrorAction SilentlyContinue
+        if ($null -ne $nomad) {
+          & $nomad.Source version
+        }
+        else {
+          & "{{ nomad_binary_path_windows }}" version
+        }
+      register: nomad_version_windows
+      changed_when: false
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Assert Nomad edition marker (Windows)
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              (nomad_version_windows.stdout | default('')) is search('\\+ent')
+            ) == nomad_enterprise_expected
+        fail_msg: >-
+          Windows Nomad edition does not match expected value.
+          Expected enterprise={{ nomad_enterprise_expected }}, output={{ nomad_version_windows.stdout | default('') }}
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Check Nomad config file (POSIX)
+      ansible.builtin.stat:
+        path: "{{ nomad_config_path }}"
+      register: nomad_config_posix
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Assert Nomad config exists (POSIX)
+      ansible.builtin.assert:
+        that:
+          - nomad_config_posix.stat.exists
+        fail_msg: "Nomad config file is missing on POSIX host."
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Read Nomad config content (POSIX)
+      ansible.builtin.slurp:
+        src: "{{ nomad_config_path }}"
+      register: nomad_config_posix_content
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Assert Nomad server address is rendered (POSIX)
+      ansible.builtin.assert:
+        that:
+          - "nomad_server_address in (nomad_config_posix_content.content | b64decode)"
+        fail_msg: "Nomad server address not found in POSIX config."
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Check Nomad config file (Windows)
+      ansible.windows.win_stat:
+        path: "{{ nomad_config_path }}"
+      register: nomad_config_windows
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Assert Nomad config exists (Windows)
+      ansible.builtin.assert:
+        that:
+          - nomad_config_windows.stat.exists
+        fail_msg: "Nomad config file is missing on Windows host."
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Read Nomad config content (Windows)
+      ansible.windows.win_shell: |
+        Get-Content -Path "{{ nomad_config_path }}" -Raw
+      register: nomad_config_windows_content
+      changed_when: false
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Assert Nomad server address is rendered (Windows)
+      ansible.builtin.assert:
+        that:
+          - "nomad_server_address in nomad_config_windows_content.stdout"
+        fail_msg: "Nomad server address not found in Windows config."
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Check Nomad Enterprise license file (POSIX)
+      ansible.builtin.stat:
+        path: "{{ nomad_license_path }}"
+      register: nomad_license_posix
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Assert Nomad Enterprise license file state (POSIX)
+      ansible.builtin.assert:
+        that:
+          - nomad_license_posix.stat.exists == nomad_license_expected
+        fail_msg: "POSIX Nomad Enterprise license file state does not match expected value."
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Check Nomad Enterprise license file (Windows)
+      ansible.windows.win_stat:
+        path: "{{ nomad_license_path }}"
+      register: nomad_license_windows
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Assert Nomad Enterprise license file state (Windows)
+      ansible.builtin.assert:
+        that:
+          - nomad_license_windows.stat.exists == nomad_license_expected
+        fail_msg: "Windows Nomad Enterprise license file state does not match expected value."
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Check introduction token file (POSIX)
+      ansible.builtin.stat:
+        path: "{{ nomad_intro_token_path }}"
+      register: nomad_intro_token_posix
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Assert introduction token file state (POSIX)
+      ansible.builtin.assert:
+        that:
+          - nomad_intro_token_posix.stat.exists == nomad_intro_token_expected
+        fail_msg: "POSIX introduction token file state does not match expected value."
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Check introduction token file (Windows)
+      ansible.windows.win_stat:
+        path: "{{ nomad_intro_token_path }}"
+      register: nomad_intro_token_windows
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Assert introduction token file state (Windows)
+      ansible.builtin.assert:
+        that:
+          - nomad_intro_token_windows.stat.exists == nomad_intro_token_expected
+        fail_msg: "Windows introduction token file state does not match expected value."
+      when: ansible_facts['os_family'] == 'Windows'

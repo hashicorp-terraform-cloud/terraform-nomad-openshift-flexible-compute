@@ -1,0 +1,10 @@
+terraform {
+  cloud {
+    organization = "your-hcp-terraform-org"
+    workspaces {
+      project = "AWS"
+      name = "terraform-nomad-openshift-flexible-compute-e2e"
+    }
+  }
+  
+}
