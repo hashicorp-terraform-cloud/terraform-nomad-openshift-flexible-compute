@@ -1,14 +1,100 @@
 ---
-- name: Enable and start Nomad service
+- name: Stop Nomad service before state reset (Linux)
   ansible.builtin.service:
-    name: nomad
+    name: "{{ nomad_client_install_service_name }}"
+    state: stopped
+  when:
+    - ansible_facts["system"] == "Linux"
+    - nomad_client_install_reset_state | bool
+
+- name: Reset Nomad client state directory (Linux)
+  ansible.builtin.file:
+    path: "{{ nomad_client_install_state_dir }}"
+    state: absent
+  when:
+    - ansible_facts["system"] == "Linux"
+    - nomad_client_install_reset_state | bool
+
+- name: Recreate Nomad client state directory (Linux)
+  ansible.builtin.file:
+    path: "{{ nomad_client_install_state_dir }}"
+    state: directory
+    owner: "nomad"
+    group: "nomad"
+    mode: "0750"
+  when:
+    - ansible_facts["system"] == "Linux"
+    - nomad_client_install_reset_state | bool
+
+- name: Rewrite Nomad client introduction token file after state reset (Linux)
+  ansible.builtin.copy:
+    content: "{{ nomad_client_install_intro_token }}"
+    dest: "{{ nomad_client_install_state_dir }}/intro_token.jwt"
+    owner: "nomad"
+    group: "nomad"
+    mode: "0600"
+  when:
+    - ansible_facts["system"] == "Linux"
+    - nomad_client_install_reset_state | bool
+    - nomad_client_install_intro_token | length > 0
+  no_log: true
+
+- name: Stop Nomad service before state reset (Windows)
+  ansible.windows.win_service:
+    name: "{{ nomad_client_install_service_name }}"
+    state: stopped
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_reset_state | bool
+
+- name: Reset Nomad client state directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_client_install_state_dir }}"
+    state: absent
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_reset_state | bool
+
+- name: Recreate Nomad client state directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_client_install_state_dir }}"
+    state: directory
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_reset_state | bool
+
+- name: Rewrite Nomad client introduction token file after state reset (Windows)
+  ansible.windows.win_copy:
+    content: "{{ nomad_client_install_intro_token }}"
+    dest: "{{ nomad_client_install_state_dir }}\\intro_token.jwt"
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_reset_state | bool
+    - nomad_client_install_intro_token | length > 0
+  no_log: true
+
+- name: Enable and start Nomad service (Linux)
+  ansible.builtin.service:
+    name: "{{ nomad_client_install_service_name }}"
     state: started
     enabled: true
-  when: ansible_os_family != "Windows"
+  when: ansible_facts["system"] == "Linux"
+
+- name: Enable and start Nomad service (macOS)
+  ansible.builtin.shell: |
+    if launchctl print system/{{ nomad_client_install_launchd_label }} >/dev/null 2>&1; then
+      launchctl kickstart -k system/{{ nomad_client_install_launchd_label }}
+    else
+      launchctl bootstrap system "{{ nomad_client_install_launchd_plist_path }}"
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+  when: ansible_facts["system"] == "Darwin"
 
 - name: Enable and start Nomad service (Windows)
   ansible.windows.win_service:
-    name: nomad
+    name: "{{ nomad_client_install_service_name }}"
     state: started
     start_mode: auto
-  when: ansible_os_family == "Windows"
+  when: ansible_facts["os_family"] == "Windows"

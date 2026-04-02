@@ -1,0 +1,40 @@
+# Default mode: deploy a single-node Nomad server in the E2E VPC.
+deploy_nomad_server = true
+nomad_acl_enabled   = true
+
+# Required only when deploy_nomad_server = false.
+# Use a reachable external host/IP (without :4647).
+nomad_server_address = ""
+
+# Optional manual override: set when your cluster enforces client introduction tokens.
+# If left empty in self-hosted ACL-enabled E2E mode, the harness auto-generates one
+# and injects it into generated extra vars.
+client_introduction_token = ""
+
+# Optional: Nomad install profile for E2E clients.
+# Defaults are derived from edition:
+# - community  -> package "nomad", version "1.11.3"
+# - enterprise -> package "nomad-enterprise", version "1.11.3+ent"
+# nomad_edition = "enterprise"
+
+# Optional advanced override for Nomad version pinning.
+# nomad_version = "1.11.3+ent"
+
+# Optional single-line Enterprise license string.
+# nomad_license = "<single-line-license>"
+
+# Restrict source IPs allowed to access test hosts.
+# Default is broad for first-run connectivity; tighten to your current public CIDR after bring-up.
+allowed_cidr_blocks = ["0.0.0.0/0"]
+
+# Optional: add a Red Hat Enterprise Linux client alongside the default Amazon Linux host.
+# deploy_redhat_client = true
+# redhat_ami_id        = "ami-xxxxxxxxxxxxxxxxx"
+# redhat_instance_type = "t3a.small"
+# redhat_ssh_user      = "ec2-user"
+
+# Optional tag overrides.
+tags = {
+  Environment = "e2e"
+  Project     = "terraform-nomad-openshift-flexible-compute"
+}

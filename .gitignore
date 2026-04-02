@@ -31,3 +31,13 @@ terraform.rc
 
 # Ignore lock files (optional - some teams prefer to commit this)
 .terraform.lock.hcl
+
+# Local environment files
+.env
+.env.*
+.venv/
+
+# E2E local backend config and generated artifacts
+e2e_tests/backend.hcl
+e2e_tests/.artifacts/
+e2e_tests/backend.tf

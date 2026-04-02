@@ -1,14 +1,87 @@
 ---
 # Required — passed from Terraform via AAP extra_vars
-nomad_server_address: ""
+nomad_client_install_server_address: "{{ nomad_server_address | default('') }}"
+
+# Edition
+nomad_client_install_edition: "{{ nomad_edition | default('community') }}"
 
 # Package
-nomad_package: "nomad-enterprise"
-nomad_version: "1.11.2+ent"
+nomad_client_install_package: >-
+  {{ 'nomad-enterprise' if (nomad_client_install_edition == 'enterprise') else 'nomad' }}
+nomad_client_install_version: >-
+  {{ nomad_version | default('1.11.3+ent' if (nomad_client_install_edition == 'enterprise') else '1.11.3') }}
+nomad_client_install_alternate_package: >-
+  {{ 'nomad' if (nomad_client_install_package == 'nomad-enterprise') else 'nomad-enterprise' }}
 
-# Direct download (non-RedHat/Debian)
-nomad_install_dir: "/usr/local/bin"
-nomad_arch_map:
+# Direct download defaults by platform
+nomad_client_install_install_dir_linux: "{{ nomad_install_dir_linux | default('/usr/local/bin') }}"
+nomad_client_install_install_dir_macos: "{{ nomad_install_dir_macos | default('/usr/local/bin') }}"
+nomad_client_install_install_dir_windows: "{{ nomad_install_dir_windows | default('C:\\Program Files\\Nomad') }}"
+
+nomad_client_install_config_dir_linux: "{{ nomad_config_dir_linux | default('/etc/nomad.d') }}"
+nomad_client_install_config_dir_macos: "{{ nomad_config_dir_macos | default('/etc/nomad.d') }}"
+nomad_client_install_config_dir_windows: "{{ nomad_config_dir_windows | default('C:\\ProgramData\\Nomad\\config') }}"
+
+nomad_client_install_data_dir_linux: "{{ nomad_data_dir_linux | default('/opt/nomad') }}"
+nomad_client_install_data_dir_macos: "{{ nomad_data_dir_macos | default('/opt/nomad') }}"
+nomad_client_install_data_dir_windows: "{{ nomad_data_dir_windows | default('C:\\ProgramData\\Nomad\\data') }}"
+
+nomad_client_install_state_dir_linux: "{{ nomad_state_dir_linux | default(nomad_client_install_data_dir_linux ~ '/client') }}"
+nomad_client_install_state_dir_macos: "{{ nomad_state_dir_macos | default(nomad_client_install_data_dir_macos ~ '/client') }}"
+nomad_client_install_state_dir_windows: '{{ nomad_state_dir_windows | default([nomad_client_install_data_dir_windows, "client"] | join("\\")) }}'
+
+nomad_client_install_alloc_dir_linux: "{{ nomad_alloc_dir_linux | default(nomad_client_install_data_dir_linux ~ '/alloc') }}"
+nomad_client_install_alloc_dir_macos: "{{ nomad_alloc_dir_macos | default(nomad_client_install_data_dir_macos ~ '/alloc') }}"
+nomad_client_install_alloc_dir_windows: '{{ nomad_alloc_dir_windows | default([nomad_client_install_data_dir_windows, "alloc"] | join("\\")) }}'
+
+nomad_client_install_alloc_mounts_dir_linux: >-
+  {{ nomad_alloc_mounts_dir_linux | default(nomad_client_install_data_dir_linux ~ '/alloc_mounts') }}
+nomad_client_install_alloc_mounts_dir_macos: >-
+  {{ nomad_alloc_mounts_dir_macos | default(nomad_client_install_data_dir_macos ~ '/alloc_mounts') }}
+nomad_client_install_alloc_mounts_dir_windows: >-
+  {{ nomad_alloc_mounts_dir_windows | default([nomad_client_install_data_dir_windows, "alloc_mounts"] | join("\\")) }}
+
+nomad_client_install_platform_install_dir: >-
+  {{ nomad_client_install_install_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_install_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_install_dir_linux) }}
+
+nomad_client_install_install_dir: "{{ nomad_install_dir | default(nomad_client_install_platform_install_dir) }}"
+
+nomad_client_install_platform_config_dir: >-
+  {{ nomad_client_install_config_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_config_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_config_dir_linux) }}
+
+nomad_client_install_config_dir: "{{ nomad_config_dir | default(nomad_client_install_platform_config_dir) }}"
+
+nomad_client_install_platform_data_dir: >-
+  {{ nomad_client_install_data_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_data_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_data_dir_linux) }}
+
+nomad_client_install_data_dir: "{{ nomad_data_dir | default(nomad_client_install_platform_data_dir) }}"
+
+nomad_client_install_platform_state_dir: >-
+  {{ nomad_client_install_state_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_state_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_state_dir_linux) }}
+
+nomad_client_install_state_dir: "{{ nomad_state_dir | default(nomad_client_install_platform_state_dir) }}"
+
+nomad_client_install_platform_alloc_dir: >-
+  {{ nomad_client_install_alloc_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_alloc_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_alloc_dir_linux) }}
+
+nomad_client_install_alloc_dir: "{{ nomad_alloc_dir | default(nomad_client_install_platform_alloc_dir) }}"
+
+nomad_client_install_platform_alloc_mounts_dir: >-
+  {{ nomad_client_install_alloc_mounts_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_alloc_mounts_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_alloc_mounts_dir_linux) }}
+
+nomad_client_install_alloc_mounts_dir: "{{ nomad_alloc_mounts_dir | default(nomad_client_install_platform_alloc_mounts_dir) }}"
+
+nomad_client_install_service_name: "{{ nomad_service_name | default('nomad') }}"
+nomad_client_install_launchd_label: "{{ nomad_launchd_label | default('com.hashicorp.nomad') }}"
+nomad_client_install_launchd_plist_path: "{{ nomad_launchd_plist_path | default('/Library/LaunchDaemons/com.hashicorp.nomad.plist') }}"
+
+nomad_client_install_arch_map:
   x86_64: "amd64"
   aarch64: "arm64"
   arm64: "arm64"
@@ -16,11 +89,62 @@ nomad_arch_map:
   AMD64: "amd64"
   64-bit: "amd64"
 
+nomad_client_install_download_url: >-
+  {{ [
+    'https://releases.hashicorp.com/nomad',
+    nomad_client_install_version,
+    'nomad_' ~
+    nomad_client_install_version ~
+    '_' ~
+    (ansible_facts.get('system', '') | lower) ~
+    '_' ~
+    (nomad_client_install_arch_map[ansible_facts.get('architecture', '')] | default('amd64')) ~
+    '.zip'
+  ] | join('/') }}
+
+nomad_client_install_windows_download_url: >-
+  {{ [
+    'https://releases.hashicorp.com/nomad',
+    nomad_client_install_version,
+    'nomad_' ~
+    nomad_client_install_version ~
+    '_windows_' ~
+    (nomad_client_install_arch_map[ansible_facts.get('architecture', '')] | default('amd64')) ~
+    '.zip'
+  ] | join('/') }}
+
 # Configuration
-nomad_datacenter: "dc1"
-nomad_region: "global"
-nomad_data_dir: "/opt/nomad"
-nomad_config_dir: "/etc/nomad.d"
+nomad_client_install_datacenter: "{{ nomad_datacenter | default('dc1') }}"
+nomad_client_install_region: "{{ nomad_region | default('global') }}"
+nomad_client_install_intro_token: "{{ nomad_client_intro_token | default('') }}"
+nomad_client_install_reset_state: false
+
+# TLS
+nomad_client_install_tls_enabled: "{{ nomad_tls_enabled | default(false) }}"
+nomad_client_install_tls_verify_server_hostname: "{{ nomad_tls_verify_server_hostname | default(true) }}"
+nomad_client_install_tls_verify_https_client: "{{ nomad_tls_verify_https_client | default(true) }}"
+
+nomad_client_install_tls_dir_linux: "{{ nomad_tls_dir_linux | default('/etc/nomad.d/tls') }}"
+nomad_client_install_tls_dir_macos: "{{ nomad_tls_dir_macos | default('/etc/nomad.d/tls') }}"
+nomad_client_install_tls_dir_windows: "{{ nomad_tls_dir_windows | default('C:\\ProgramData\\Nomad\\config\\tls') }}"
+
+nomad_client_install_platform_tls_dir: >-
+  {{ nomad_client_install_tls_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_tls_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_tls_dir_linux) }}
+
+nomad_client_install_tls_dir: "{{ nomad_tls_dir | default(nomad_client_install_platform_tls_dir) }}"
+nomad_client_install_path_sep: "{{ '\\\\' if (ansible_facts.get('os_family', '')) == 'Windows' else '/' }}"
+
+nomad_client_install_tls_ca_file: >-
+  {{ nomad_tls_ca_file | default([nomad_client_install_tls_dir, 'nomad-agent-ca.pem'] | join(nomad_client_install_path_sep)) }}
+nomad_client_install_tls_cert_file: >-
+  {{ nomad_tls_client_cert_file | default([nomad_client_install_tls_dir, 'global-client-nomad.pem'] | join(nomad_client_install_path_sep)) }}
+nomad_client_install_tls_key_file: >-
+  {{ nomad_tls_client_key_file | default([nomad_client_install_tls_dir, 'global-client-nomad-key.pem'] | join(nomad_client_install_path_sep)) }}
+
+nomad_client_install_tls_ca_pem: "{{ nomad_tls_ca_pem | default('') }}"
+nomad_client_install_tls_client_cert_pem: "{{ nomad_tls_client_cert_pem | default('') }}"
+nomad_client_install_tls_client_key_pem: "{{ nomad_tls_client_key_pem | default('') }}"
 
 # Enterprise license (optional — can also be set via NOMAD_LICENSE env var)
-nomad_license: ""
+nomad_client_install_license: "{{ nomad_license | default('') }}"
