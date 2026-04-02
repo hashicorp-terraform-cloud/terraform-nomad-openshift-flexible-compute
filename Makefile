@@ -127,22 +127,49 @@ e2e-wait-ready:
 e2e-bootstrap-acl:
 	bash e2e_tests/scripts/bootstrap_acl.sh
 
-e2e-install: e2e-venv e2e-generate-inventory
+e2e-bootstrap-acl-auto:
+	@deploy_nomad_server="$$(terraform -chdir=e2e_tests output -raw deploy_nomad_server 2>/dev/null || echo false)"; \
+	nomad_acl_enabled="$$(terraform -chdir=e2e_tests output -raw nomad_acl_enabled 2>/dev/null || echo false)"; \
+	if [ "$$deploy_nomad_server" = "true" ] && [ "$$nomad_acl_enabled" = "true" ]; then \
+		if [ -s "$(E2E_ARTIFACTS_DIR)/nomad_management_token.txt" ]; then \
+			echo "ACL bootstrap token already present; reusing existing token artifact."; \
+			$(MAKE) e2e-generate-inventory; \
+			exit 0; \
+		fi; \
+		if [ -n "$$NOMAD_TOKEN" ]; then \
+			echo "Using NOMAD_TOKEN from environment for ACL-authenticated E2E flow."; \
+			mkdir -p "$(E2E_ARTIFACTS_DIR)"; \
+			printf "%s" "$$NOMAD_TOKEN" > "$(E2E_ARTIFACTS_DIR)/nomad_management_token.txt"; \
+			$(MAKE) e2e-generate-inventory; \
+			exit 0; \
+		fi; \
+		echo "ACL is enabled for self-hosted E2E Nomad server; bootstrapping management token..."; \
+		$(MAKE) e2e-generate-inventory; \
+		if ! bash e2e_tests/scripts/bootstrap_acl.sh; then \
+			echo "ACL bootstrap failed. If the cluster is already bootstrapped, set NOMAD_TOKEN in your environment and retry."; \
+			exit 1; \
+		fi; \
+		$(MAKE) e2e-generate-inventory; \
+	else \
+		echo "Skipping ACL bootstrap (deploy_nomad_server=$$deploy_nomad_server, nomad_acl_enabled=$$nomad_acl_enabled)."; \
+	fi
+
+e2e-install: e2e-venv e2e-bootstrap-acl-auto e2e-generate-inventory
 	bash e2e_tests/scripts/preflight.sh
 	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook -i "$(E2E_INVENTORY_FILE)" ansible/install_nomad_client.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
 
-e2e-assert-install: e2e-venv e2e-generate-inventory
+e2e-assert-install: e2e-venv e2e-bootstrap-acl-auto e2e-generate-inventory
 	bash e2e_tests/scripts/preflight.sh
 	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook -i "$(E2E_INVENTORY_FILE)" e2e_tests/ansible/assert_install.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
 
 e2e-run-test-jobs: e2e-venv
 	$(E2E_VENV_PATH_PREFIX) bash e2e_tests/scripts/run_test_jobs.sh
 
-e2e-run-remove: e2e-venv e2e-run-test-jobs e2e-generate-inventory
+e2e-run-remove: e2e-venv e2e-bootstrap-acl-auto e2e-run-test-jobs e2e-generate-inventory
 	bash e2e_tests/scripts/preflight.sh
-	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook -i "$(E2E_INVENTORY_FILE)" ansible/remove_nomad_client.yml --limit "$${E2E_LIMIT:-nomad_clients}"
+	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook -i "$(E2E_INVENTORY_FILE)" ansible/remove_nomad_client.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
 
-e2e-assert-remove: e2e-venv e2e-generate-inventory
+e2e-assert-remove: e2e-venv e2e-bootstrap-acl-auto e2e-generate-inventory
 	bash e2e_tests/scripts/preflight.sh
 	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook -i "$(E2E_INVENTORY_FILE)" e2e_tests/ansible/assert_remove.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
 

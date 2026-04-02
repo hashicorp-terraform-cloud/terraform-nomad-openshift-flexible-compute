@@ -15,6 +15,10 @@ This harness focuses on Ansible lifecycle behavior and supports two modes:
 - **Default (self-contained):** deploys a single-node Nomad server in AWS for E2E runs.
 - **External server:** skips server provisioning and targets your existing Nomad deployment.
 
+By default, the harness enables Nomad TLS encryption for server/client traffic and uses HTTPS with client certificates for Nomad API operations (`verify_https_client = true`).
+
+In self-contained mode (`deploy_nomad_server = true`), Nomad ACLs are enabled by default (`nomad_acl_enabled = true`). The E2E Make targets bootstrap ACLs automatically and propagate the bootstrap management token to generated local extra vars for authenticated install/remove assertions.
+
 ## Prerequisites
 
 - Terraform `>= 1.11`
@@ -35,6 +39,9 @@ The E2E harness generates a disposable PEM-encoded RSA key pair automatically. L
 - `e2e_rsa.pem` (private key)
 - `inventory.ini` (Ansible inventory)
 - `extra_vars.yml` (Ansible extra vars)
+- `nomad-agent-ca.pem` (Nomad TLS CA certificate for local API calls)
+- `global-cli-nomad.pem` (Nomad TLS client certificate for local API calls)
+- `global-cli-nomad-key.pem` (Nomad TLS client key for local API calls)
 
 Terraform also decrypts the Windows administrator password natively via `rsadecrypt()` and exposes rendered inventory/vars content for local generation.
 
@@ -61,6 +68,14 @@ At minimum, set either:
 
 - `deploy_nomad_server = true` (default), or
 - `deploy_nomad_server = false` **and** `nomad_server_address`.
+
+TLS inputs:
+
+- Self-contained mode (`deploy_nomad_server = true`) auto-generates a test CA and Nomad server/client/CLI certificates.
+- External-server mode with TLS requires supplying:
+   - `nomad_tls_ca_pem`
+   - `nomad_tls_client_cert_pem`
+   - `nomad_tls_client_key_pem`
 
 Optional:
 
@@ -90,6 +105,7 @@ Example local tfvars (do not commit):
 ```hcl
 # Self-contained mode (default)
 deploy_nomad_server      = true
+nomad_acl_enabled        = true
 
 # Optional instance size overrides
 # linux_instance_type        = "t3a.small"
@@ -125,11 +141,13 @@ From repository root:
 
    make e2e-install
 
+   When ACL is enabled for a self-hosted E2E server, `make e2e-install` bootstraps ACLs automatically and writes a local management token file at `e2e_tests/.artifacts/nomad_management_token.txt`. The token is then injected into generated `extra_vars.yml` as `nomad_token` for authenticated Nomad API checks and remove workflow drain/purge operations.
+
    If you use `make e2e`, `make e2e-install`, `make e2e-assert-install`, `make e2e-run-remove`, `make e2e-assert-remove`, `make ansible-check`, or `make ansible-lint`, the Makefile will create `.venv/` with the required Ansible and WinRM Python packages automatically.
 
    The generated Linux inventory sets SSH arguments to disable strict host key checking for ephemeral E2E hosts, which avoids failures due to recycled public IP host key mismatches.
 
-   In self-contained mode (`deploy_nomad_server = true`), readiness checks wait for the Nomad server API to report a leader and client workflows use the server's EC2 private DNS hostname in generated extra vars. Tune wait behavior with:
+   In self-contained mode (`deploy_nomad_server = true`), readiness checks wait for the Nomad server API to report a leader and the default TLS-enabled client workflow uses a deterministic private IP for the Nomad server in generated extra vars. Tune wait behavior with:
    - `E2E_NOMAD_WAIT_MAX_ATTEMPTS` (default `30`)
    - `E2E_NOMAD_WAIT_SLEEP_SECONDS` (default `10`)
 
@@ -141,9 +159,11 @@ From repository root:
    - `E2E_SSH_WAIT_MAX_ATTEMPTS` (default `60`)
    - `E2E_SSH_WAIT_SLEEP_SECONDS` (default `10`)
 
-   The E2E harness defaults to community edition (`nomad`, version `1.11.3`) and derives package selection from `nomad_edition`. You can configure edition/version/license through `e2e_tests/terraform.tfvars` (`nomad_edition`, `nomad_version`, `nomad_license`).
+   The E2E harness defaults to community edition (`nomad`, version `1.11.3`) and derives package selection from `nomad_edition`. You can configure edition/version/license through `e2e_tests/terraform.tfvars` (`nomad_edition`, `nomad_version`, `nomad_license`). When `nomad_edition = "enterprise"`, `nomad_license` is required so the self-hosted Nomad server can start with a valid enterprise license.
 
    The generated extra vars also enable the Nomad `raw_exec` task driver on Windows E2E clients so `run_test_jobs.sh` can submit the Windows wait job prior to remove.
+
+   The E2E install flow resets each client's Nomad state directory before service startup. This ensures clients can re-register cleanly when the self-hosted Nomad server is replaced between runs.
 
    On macOS controllers, the scripts automatically set `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` when not already set to avoid intermittent Ansible worker crashes during mixed SSH/WinRM execution.
 
@@ -163,6 +183,8 @@ From repository root:
 
    make e2e-assert-remove
 
+As a convenience, `make e2e-check` runs non-destructive E2E validation tasks, including Terraform formatting and validation under `e2e_tests/` plus syntax checks for the E2E assertion playbooks.
+
 1. Destroy test hosts:
 
    make e2e-destroy
@@ -178,6 +200,8 @@ bash e2e_tests/scripts/bootstrap_acl.sh https://your-nomad.example.com:4646
 ```
 
 If you omit the address in self-contained mode, the script defaults to the E2E Nomad server **public** API endpoint so it remains reachable from your local machine. The script writes the bootstrap management token to `.artifacts/nomad_management_token.txt`.
+
+For default self-contained E2E make targets, this bootstrap step is automatic.
 
 ## Security notes
 

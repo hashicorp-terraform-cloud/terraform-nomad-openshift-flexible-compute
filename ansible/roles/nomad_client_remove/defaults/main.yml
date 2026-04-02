@@ -1,11 +1,27 @@
 ---
 nomad_client_remove_drain_before_uninstall: "{{ nomad_remove_drain_before_uninstall | default(true) }}"
-nomad_client_remove_drain_force: "{{ nomad_remove_drain_force | default(false) }}"
-nomad_client_remove_drain_deadline: "{{ nomad_remove_drain_deadline | default('30m') }}"
+nomad_client_remove_drain_force: "{{ nomad_remove_drain_force | default(true) }}"
+nomad_client_remove_drain_deadline: "{{ nomad_remove_drain_deadline | default('5m') }}"
 nomad_client_remove_nomad_addr: "{{ nomad_addr | default('') }}"
 nomad_client_remove_nomad_token: "{{ nomad_token | default('') }}"
+nomad_client_remove_nomad_server_address: "{{ nomad_server_address | default('') }}"
+nomad_client_remove_acl_enabled: "{{ nomad_acl_enabled | default(false) }}"
+nomad_client_remove_tls_enabled: "{{ nomad_tls_enabled | default(false) }}"
+nomad_client_remove_path_sep: "{{ '\\\\' if (ansible_facts.get('os_family', '')) == 'Windows' else '/' }}"
+nomad_client_remove_tls_ca_file: >-
+  {{ nomad_tls_ca_file | default([nomad_client_remove_config_dir, 'tls', 'nomad-agent-ca.pem'] | join(nomad_client_remove_path_sep)) }}
+nomad_client_remove_tls_cert_file: >-
+  {{ nomad_tls_client_cert_file | default([nomad_client_remove_config_dir, 'tls', 'global-client-nomad.pem'] | join(nomad_client_remove_path_sep)) }}
+nomad_client_remove_tls_key_file: >-
+  {{ nomad_tls_client_key_file | default([nomad_client_remove_config_dir, 'tls', 'global-client-nomad-key.pem'] | join(nomad_client_remove_path_sep)) }}
+nomad_client_remove_allocations_wait_retries: "{{ nomad_remove_allocations_wait_retries | default(12) }}"
+nomad_client_remove_allocations_wait_delay_seconds: "{{ nomad_remove_allocations_wait_delay_seconds | default(10) }}"
+nomad_client_remove_delete_state: "{{ nomad_remove_delete_state | default(true) }}"
+nomad_client_remove_purge_node: "{{ nomad_remove_purge_node | default(true) }}"
 
-nomad_client_remove_package: "{{ nomad_package | default('nomad-enterprise') }}"
+nomad_client_remove_edition: "{{ nomad_edition | default('community') }}"
+nomad_client_remove_package: "{{ 'nomad-enterprise' if (nomad_client_remove_edition == 'enterprise') else 'nomad' }}"
+nomad_client_remove_packages: "{{ nomad_packages | default([nomad_client_remove_package, 'nomad', 'nomad-enterprise'] | unique) }}"
 
 nomad_client_remove_install_dir_linux: "{{ nomad_install_dir_linux | default('/usr/local/bin') }}"
 nomad_client_remove_install_dir_macos: "{{ nomad_install_dir_macos | default('/usr/local/bin') }}"
@@ -24,26 +40,26 @@ nomad_client_remove_state_dir_macos: "{{ nomad_state_dir_macos | default(nomad_c
 nomad_client_remove_state_dir_windows: '{{ nomad_state_dir_windows | default([nomad_client_remove_data_dir_windows, "client"] | join("\\")) }}'
 
 nomad_client_remove_platform_install_dir: >-
-  {{ nomad_client_remove_install_dir_windows if (ansible_os_family | default('')) == 'Windows'
-  else (nomad_client_remove_install_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_remove_install_dir_linux) }}
+  {{ nomad_client_remove_install_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_remove_install_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_remove_install_dir_linux) }}
 
 nomad_client_remove_install_dir: "{{ nomad_install_dir | default(nomad_client_remove_platform_install_dir) }}"
 
 nomad_client_remove_platform_config_dir: >-
-  {{ nomad_client_remove_config_dir_windows if (ansible_os_family | default('')) == 'Windows'
-  else (nomad_client_remove_config_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_remove_config_dir_linux) }}
+  {{ nomad_client_remove_config_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_remove_config_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_remove_config_dir_linux) }}
 
 nomad_client_remove_config_dir: "{{ nomad_config_dir | default(nomad_client_remove_platform_config_dir) }}"
 
 nomad_client_remove_platform_data_dir: >-
-  {{ nomad_client_remove_data_dir_windows if (ansible_os_family | default('')) == 'Windows'
-  else (nomad_client_remove_data_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_remove_data_dir_linux) }}
+  {{ nomad_client_remove_data_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_remove_data_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_remove_data_dir_linux) }}
 
 nomad_client_remove_data_dir: "{{ nomad_data_dir | default(nomad_client_remove_platform_data_dir) }}"
 
 nomad_client_remove_platform_state_dir: >-
-  {{ nomad_client_remove_state_dir_windows if (ansible_os_family | default('')) == 'Windows'
-  else (nomad_client_remove_state_dir_macos if (ansible_system | default('')) == 'Darwin' else nomad_client_remove_state_dir_linux) }}
+  {{ nomad_client_remove_state_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_remove_state_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_remove_state_dir_linux) }}
 
 nomad_client_remove_state_dir: "{{ nomad_state_dir | default(nomad_client_remove_platform_state_dir) }}"
 

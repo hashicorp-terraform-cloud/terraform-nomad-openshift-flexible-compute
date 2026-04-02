@@ -70,7 +70,7 @@ output "nomad_server_address" {
 
 output "nomad_server_private_ip" {
   description = "Private IP of the E2E Nomad server when deploy_nomad_server is true; null otherwise."
-  value       = try(aws_instance.nomad_server[0].private_ip, null)
+  value       = local.nomad_server_private_ip
 }
 
 output "nomad_server_private_dns" {
@@ -80,7 +80,7 @@ output "nomad_server_private_dns" {
 
 output "nomad_server_public_ip" {
   description = "Public IP of the E2E Nomad server when deploy_nomad_server is true; null otherwise."
-  value       = try(aws_instance.nomad_server[0].public_ip, null)
+  value       = try(aws_eip.nomad_server[0].public_ip, null)
 }
 
 output "nomad_datacenter" {
@@ -91,6 +91,11 @@ output "nomad_datacenter" {
 output "nomad_region" {
   description = "Nomad region value used by Ansible install playbook."
   value       = var.nomad_region
+}
+
+output "nomad_acl_enabled" {
+  description = "Whether Nomad ACLs are enabled in the self-hosted E2E Nomad server configuration."
+  value       = var.nomad_acl_enabled
 }
 
 output "nomad_edition" {
@@ -112,5 +117,33 @@ output "nomad_license" {
 output "client_introduction_token" {
   description = "Optional Nomad client introduction token used during install tests."
   value       = var.client_introduction_token
+  sensitive   = true
+}
+
+output "nomad_tls_enabled" {
+  description = "Whether Nomad TLS is enabled in the E2E harness."
+  value       = var.nomad_tls_enabled
+}
+
+output "nomad_addr" {
+  description = "Nomad API address used by E2E scripts and remove workflow."
+  value       = "${var.nomad_tls_enabled ? "https" : "http"}://${local.effective_nomad_server_address}:4646"
+}
+
+output "nomad_tls_ca_pem" {
+  description = "PEM-encoded Nomad TLS CA certificate used by E2E workflows."
+  value       = local.nomad_tls_ca_pem_e2e
+  sensitive   = true
+}
+
+output "nomad_tls_client_cert_pem" {
+  description = "PEM-encoded Nomad TLS client certificate used by E2E workflows."
+  value       = local.nomad_tls_cli_cert_pem_e2e
+  sensitive   = true
+}
+
+output "nomad_tls_client_key_pem" {
+  description = "PEM-encoded Nomad TLS client private key used by E2E workflows."
+  value       = local.nomad_tls_cli_key_pem_e2e
   sensitive   = true
 }

@@ -162,11 +162,13 @@ This repository includes an Ansible-focused end-to-end harness under `e2e_tests/
 - Verifies install and remove behavior with assertion playbooks.
 - Waits for self-hosted Nomad server API, SSH, and WinRM readiness before running install/assert/remove workflows.
 
+The E2E harness enables Nomad TLS by default and uses HTTPS with client certificates for local Nomad API operations in self-contained runs.
+
 By default, the harness now provisions a single-node Nomad server in AWS for self-contained E2E runs. To target an existing cluster instead, set `deploy_nomad_server = false` and provide `nomad_server_address` in `e2e_tests/terraform.tfvars`.
 
 The default E2E host sizes use `t3a.small` for Amazon Linux/server nodes and `t3a.large` for the Windows node. This preserves the same x86 instance sizing profile as the previous T3 defaults while using AWS's lower-cost comparable T3a family.
 
-The E2E harness automatically selects a default subnet whose Availability Zone supports all requested EC2 instance types, avoiding unsupported-AZ failures from lexicographically first default subnets. In self-contained mode it passes the Nomad server's EC2 private DNS hostname to client configuration, while local ACL bootstrap convenience still defaults to the server's public API endpoint.
+The E2E harness automatically selects a default subnet whose Availability Zone supports all requested EC2 instance types, avoiding unsupported-AZ failures from lexicographically first default subnets. In self-contained mode it passes a deterministic private IP for the Nomad server to client configuration in the default TLS-enabled flow, while local ACL bootstrap convenience still defaults to the server's public API endpoint.
 
 For remote-safe E2E runs, local artifacts in `e2e_tests/.artifacts/` are generated on your machine by `e2e_tests/scripts/generate_inventory.sh` from Terraform outputs, including `e2e_rsa.pem`, `inventory.ini`, and `extra_vars.yml`.
 
@@ -184,6 +186,7 @@ Convenience Make targets:
 - `make e2e-bootstrap-acl`
 - `make e2e-install`
 - `make e2e-assert-install`
+- `make e2e-check`
 - `make e2e-remove`
 - `make e2e-assert-remove`
 - `make e2e-destroy`

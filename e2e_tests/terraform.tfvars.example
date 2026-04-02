@@ -1,5 +1,6 @@
 # Default mode: deploy a single-node Nomad server in the E2E VPC.
 deploy_nomad_server = true
+nomad_acl_enabled   = true
 
 # Required only when deploy_nomad_server = false.
 # Use a reachable external host/IP (without :4647).

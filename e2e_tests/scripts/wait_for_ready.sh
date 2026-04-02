@@ -24,7 +24,7 @@ wait_for_windows_winrm_ready() {
   local windows_ip="$1"
 
   local max_attempts
-  max_attempts="${E2E_WINDOWS_WAIT_MAX_ATTEMPTS:-60}"
+  max_attempts="${E2E_WINDOWS_WAIT_MAX_ATTEMPTS:-10}"
   local sleep_seconds
   sleep_seconds="${E2E_WINDOWS_WAIT_SLEEP_SECONDS:-10}"
   local attempt
@@ -61,7 +61,7 @@ wait_for_ssh_ready() {
   local host_label="$2"
 
   local max_attempts
-  max_attempts="${E2E_SSH_WAIT_MAX_ATTEMPTS:-60}"
+  max_attempts="${E2E_SSH_WAIT_MAX_ATTEMPTS:-10}"
   local sleep_seconds
   sleep_seconds="${E2E_SSH_WAIT_SLEEP_SECONDS:-10}"
   local attempt
@@ -98,10 +98,28 @@ wait_for_nomad_server_ready() {
     exit 1
   fi
 
+  local nomad_tls_enabled
+  nomad_tls_enabled="$(terraform -chdir="${E2E_DIR}" output -raw nomad_tls_enabled 2>/dev/null || echo "false")"
+
   local nomad_addr
-  nomad_addr="http://${nomad_server_public_ip}:4646"
+  if [[ "${nomad_tls_enabled}" == "true" ]]; then
+    nomad_addr="https://${nomad_server_public_ip}:4646"
+  else
+    nomad_addr="http://${nomad_server_public_ip}:4646"
+  fi
+
+  local nomad_ca_cert_file="${E2E_DIR}/.artifacts/nomad-agent-ca.pem"
+  local nomad_client_cert_file="${E2E_DIR}/.artifacts/global-cli-nomad.pem"
+  local nomad_client_key_file="${E2E_DIR}/.artifacts/global-cli-nomad-key.pem"
+
+  if [[ "${nomad_tls_enabled}" == "true" ]]; then
+    terraform -chdir="${E2E_DIR}" output -raw nomad_tls_ca_pem > "${nomad_ca_cert_file}"
+    terraform -chdir="${E2E_DIR}" output -raw nomad_tls_client_cert_pem > "${nomad_client_cert_file}"
+    terraform -chdir="${E2E_DIR}" output -raw nomad_tls_client_key_pem > "${nomad_client_key_file}"
+    chmod 600 "${nomad_client_key_file}"
+  fi
   local max_attempts
-  max_attempts="${E2E_NOMAD_WAIT_MAX_ATTEMPTS:-30}"
+  max_attempts="${E2E_NOMAD_WAIT_MAX_ATTEMPTS:-10}"
   local sleep_seconds
   sleep_seconds="${E2E_NOMAD_WAIT_SLEEP_SECONDS:-10}"
   local attempt
@@ -109,7 +127,13 @@ wait_for_nomad_server_ready() {
 
   while [[ ${attempt} -le ${max_attempts} ]]; do
     local leader
-    leader="$(curl --silent --show-error --max-time 5 "${nomad_addr}/v1/status/leader" || true)"
+    local curl_args
+    curl_args=(--silent --show-error --max-time 5)
+    if [[ "${nomad_tls_enabled}" == "true" ]]; then
+      curl_args+=(--cacert "${nomad_ca_cert_file}" --cert "${nomad_client_cert_file}" --key "${nomad_client_key_file}")
+    fi
+
+    leader="$(curl "${curl_args[@]}" "${nomad_addr}/v1/status/leader" || true)"
     if [[ -n "${leader}" && "${leader}" != '""' ]]; then
       echo "Nomad server is ready at ${nomad_addr} (leader: ${leader})."
       return 0

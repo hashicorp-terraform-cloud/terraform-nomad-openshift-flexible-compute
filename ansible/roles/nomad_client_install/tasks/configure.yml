@@ -59,6 +59,122 @@
     state: directory
   when: ansible_facts["os_family"] == "Windows"
 
+- name: Create Nomad TLS directory (POSIX)
+  ansible.builtin.file:
+    path: "{{ nomad_client_install_tls_dir }}"
+    state: directory
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0750"
+  when:
+    - ansible_facts["os_family"] != "Windows"
+    - nomad_client_install_tls_enabled | bool
+
+- name: Create Nomad TLS directory (Windows)
+  ansible.windows.win_file:
+    path: "{{ nomad_client_install_tls_dir }}"
+    state: directory
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_tls_enabled | bool
+
+- name: Write Nomad TLS CA certificate (POSIX)
+  ansible.builtin.copy:
+    content: "{{ nomad_client_install_tls_ca_pem }}"
+    dest: "{{ nomad_client_install_tls_ca_file }}"
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0640"
+  when:
+    - ansible_facts["os_family"] != "Windows"
+    - nomad_client_install_tls_enabled | bool
+    - nomad_client_install_tls_ca_pem | length > 0
+  notify: Restart nomad
+
+- name: Write Nomad TLS client certificate (POSIX)
+  ansible.builtin.copy:
+    content: "{{ nomad_client_install_tls_client_cert_pem }}"
+    dest: "{{ nomad_client_install_tls_cert_file }}"
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0640"
+  when:
+    - ansible_facts["os_family"] != "Windows"
+    - nomad_client_install_tls_enabled | bool
+    - nomad_client_install_tls_client_cert_pem | length > 0
+  notify: Restart nomad
+
+- name: Write Nomad TLS client key (POSIX)
+  ansible.builtin.copy:
+    content: "{{ nomad_client_install_tls_client_key_pem }}"
+    dest: "{{ nomad_client_install_tls_key_file }}"
+    owner: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    group: "{{ (ansible_facts['system'] == 'Linux') | ternary('nomad', omit) }}"
+    mode: "0600"
+  when:
+    - ansible_facts["os_family"] != "Windows"
+    - nomad_client_install_tls_enabled | bool
+    - nomad_client_install_tls_client_key_pem | length > 0
+  no_log: true
+  notify: Restart nomad
+
+- name: Remove Nomad TLS files when TLS disabled (POSIX)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ nomad_client_install_tls_ca_file }}"
+    - "{{ nomad_client_install_tls_cert_file }}"
+    - "{{ nomad_client_install_tls_key_file }}"
+  when:
+    - ansible_facts["os_family"] != "Windows"
+    - not (nomad_client_install_tls_enabled | bool)
+  notify: Restart nomad
+
+- name: Write Nomad TLS CA certificate (Windows)
+  ansible.windows.win_copy:
+    content: "{{ nomad_client_install_tls_ca_pem }}"
+    dest: "{{ nomad_client_install_tls_ca_file }}"
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_tls_enabled | bool
+    - nomad_client_install_tls_ca_pem | length > 0
+  notify: Restart nomad
+
+- name: Write Nomad TLS client certificate (Windows)
+  ansible.windows.win_copy:
+    content: "{{ nomad_client_install_tls_client_cert_pem }}"
+    dest: "{{ nomad_client_install_tls_cert_file }}"
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_tls_enabled | bool
+    - nomad_client_install_tls_client_cert_pem | length > 0
+  notify: Restart nomad
+
+- name: Write Nomad TLS client key (Windows)
+  ansible.windows.win_copy:
+    content: "{{ nomad_client_install_tls_client_key_pem }}"
+    dest: "{{ nomad_client_install_tls_key_file }}"
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_tls_enabled | bool
+    - nomad_client_install_tls_client_key_pem | length > 0
+  no_log: true
+  notify: Restart nomad
+
+- name: Remove Nomad TLS files when TLS disabled (Windows)
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ nomad_client_install_tls_ca_file }}"
+    - "{{ nomad_client_install_tls_cert_file }}"
+    - "{{ nomad_client_install_tls_key_file }}"
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - not (nomad_client_install_tls_enabled | bool)
+  notify: Restart nomad
+
 - name: Template Nomad client configuration (POSIX)
   ansible.builtin.template:
     src: nomad.hcl.j2

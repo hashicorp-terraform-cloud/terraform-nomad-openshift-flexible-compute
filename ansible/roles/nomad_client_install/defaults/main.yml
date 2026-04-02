@@ -117,6 +117,34 @@ nomad_client_install_windows_download_url: >-
 nomad_client_install_datacenter: "{{ nomad_datacenter | default('dc1') }}"
 nomad_client_install_region: "{{ nomad_region | default('global') }}"
 nomad_client_install_intro_token: "{{ nomad_client_intro_token | default('') }}"
+nomad_client_install_reset_state: false
+
+# TLS
+nomad_client_install_tls_enabled: "{{ nomad_tls_enabled | default(false) }}"
+nomad_client_install_tls_verify_server_hostname: "{{ nomad_tls_verify_server_hostname | default(true) }}"
+nomad_client_install_tls_verify_https_client: "{{ nomad_tls_verify_https_client | default(true) }}"
+
+nomad_client_install_tls_dir_linux: "{{ nomad_tls_dir_linux | default('/etc/nomad.d/tls') }}"
+nomad_client_install_tls_dir_macos: "{{ nomad_tls_dir_macos | default('/etc/nomad.d/tls') }}"
+nomad_client_install_tls_dir_windows: "{{ nomad_tls_dir_windows | default('C:\\ProgramData\\Nomad\\config\\tls') }}"
+
+nomad_client_install_platform_tls_dir: >-
+  {{ nomad_client_install_tls_dir_windows if (ansible_facts.get('os_family', '')) == 'Windows'
+  else (nomad_client_install_tls_dir_macos if (ansible_facts.get('system', '')) == 'Darwin' else nomad_client_install_tls_dir_linux) }}
+
+nomad_client_install_tls_dir: "{{ nomad_tls_dir | default(nomad_client_install_platform_tls_dir) }}"
+nomad_client_install_path_sep: "{{ '\\\\' if (ansible_facts.get('os_family', '')) == 'Windows' else '/' }}"
+
+nomad_client_install_tls_ca_file: >-
+  {{ nomad_tls_ca_file | default([nomad_client_install_tls_dir, 'nomad-agent-ca.pem'] | join(nomad_client_install_path_sep)) }}
+nomad_client_install_tls_cert_file: >-
+  {{ nomad_tls_client_cert_file | default([nomad_client_install_tls_dir, 'global-client-nomad.pem'] | join(nomad_client_install_path_sep)) }}
+nomad_client_install_tls_key_file: >-
+  {{ nomad_tls_client_key_file | default([nomad_client_install_tls_dir, 'global-client-nomad-key.pem'] | join(nomad_client_install_path_sep)) }}
+
+nomad_client_install_tls_ca_pem: "{{ nomad_tls_ca_pem | default('') }}"
+nomad_client_install_tls_client_cert_pem: "{{ nomad_tls_client_cert_pem | default('') }}"
+nomad_client_install_tls_client_key_pem: "{{ nomad_tls_client_key_pem | default('') }}"
 
 # Enterprise license (optional — can also be set via NOMAD_LICENSE env var)
 nomad_client_install_license: "{{ nomad_license | default('') }}"

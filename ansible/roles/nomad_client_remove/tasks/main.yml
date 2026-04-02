@@ -7,6 +7,17 @@
         and (ansible_facts.get("distribution", "") != "Amazon")
       }}
 
+- name: Require Nomad ACL token for drain/purge operations when ACL is enabled
+  ansible.builtin.assert:
+    that:
+      - (nomad_client_remove_nomad_token | trim | length) > 0
+    fail_msg: >-
+      Nomad ACL is enabled for remove workflow, but no nomad_token was provided.
+      Provide nomad_token (management or sufficient client token) via extra vars.
+  when:
+    - nomad_client_remove_acl_enabled | bool
+    - (nomad_client_remove_drain_before_uninstall | bool) or (nomad_client_remove_purge_node | bool)
+
 - name: Build Nomad CLI environment for remove workflow
   ansible.builtin.set_fact:
     nomad_client_remove_nomad_env: >-
@@ -20,6 +31,18 @@
             (nomad_client_remove_nomad_token | trim | length > 0)
             | ternary({'NOMAD_TOKEN': nomad_client_remove_nomad_token | trim}, {})
           )
+        | combine(
+            (nomad_client_remove_tls_enabled | bool)
+            | ternary({'NOMAD_CACERT': nomad_client_remove_tls_ca_file}, {})
+          )
+        | combine(
+            (nomad_client_remove_tls_enabled | bool)
+            | ternary({'NOMAD_CLIENT_CERT': nomad_client_remove_tls_cert_file}, {})
+          )
+        | combine(
+            (nomad_client_remove_tls_enabled | bool)
+            | ternary({'NOMAD_CLIENT_KEY': nomad_client_remove_tls_key_file}, {})
+          )
       }}
   when: (nomad_client_remove_drain_before_uninstall | bool) or (nomad_client_remove_purge_node | bool)
 
@@ -30,7 +53,7 @@
         (nomad_client_remove_nomad_addr | trim)
         if (nomad_client_remove_nomad_addr | trim | length > 0)
         else (
-          ('http://' ~ (nomad_client_remove_nomad_server_address | trim) ~ ':4646')
+          (((nomad_client_remove_tls_enabled | bool) | ternary('https://', 'http://')) ~ (nomad_client_remove_nomad_server_address | trim) ~ ':4646')
           if (nomad_client_remove_nomad_server_address | trim | length > 0)
           else ''
         )
@@ -49,6 +72,18 @@
         | combine(
             (nomad_client_remove_nomad_token | trim | length > 0)
             | ternary({'NOMAD_TOKEN': nomad_client_remove_nomad_token | trim}, {})
+          )
+        | combine(
+            (nomad_client_remove_tls_enabled | bool)
+            | ternary({'NOMAD_CACERT': nomad_client_remove_tls_ca_file}, {})
+          )
+        | combine(
+            (nomad_client_remove_tls_enabled | bool)
+            | ternary({'NOMAD_CLIENT_CERT': nomad_client_remove_tls_cert_file}, {})
+          )
+        | combine(
+            (nomad_client_remove_tls_enabled | bool)
+            | ternary({'NOMAD_CLIENT_KEY': nomad_client_remove_tls_key_file}, {})
           )
       }}
   when: nomad_client_remove_purge_node | bool
@@ -146,13 +181,19 @@
   ansible.builtin.uri:
     url: >-
       {{
-        (nomad_client_remove_nomad_env.NOMAD_ADDR | default('http://127.0.0.1:4646'))
+        ((nomad_client_remove_nomad_env.NOMAD_ADDR | default(''))
+          if (nomad_client_remove_nomad_env.NOMAD_ADDR | default('') | trim | length) > 0
+          else ((nomad_client_remove_tls_enabled | bool) | ternary('https://127.0.0.1:4646', 'http://127.0.0.1:4646')))
         ~ '/v1/node/'
         ~ ((nomad_client_remove_self_node_status_posix.stdout | from_json).ID)
         ~ '/allocations'
       }}
     method: GET
     headers: "{{ nomad_client_remove_nomad_api_headers }}"
+    ca_path: "{{ (nomad_client_remove_tls_enabled | bool) | ternary(nomad_client_remove_tls_ca_file, omit) }}"
+    client_cert: "{{ (nomad_client_remove_tls_enabled | bool) | ternary(nomad_client_remove_tls_cert_file, omit) }}"
+    client_key: "{{ (nomad_client_remove_tls_enabled | bool) | ternary(nomad_client_remove_tls_key_file, omit) }}"
+    validate_certs: "{{ nomad_client_remove_tls_enabled | bool }}"
     return_content: true
   register: nomad_client_remove_self_allocations_posix
   changed_when: false
@@ -211,13 +252,16 @@
   ansible.windows.win_uri:
     url: >-
       {{
-        (nomad_client_remove_nomad_env.NOMAD_ADDR | default('http://127.0.0.1:4646'))
+        ((nomad_client_remove_nomad_env.NOMAD_ADDR | default(''))
+          if (nomad_client_remove_nomad_env.NOMAD_ADDR | default('') | trim | length) > 0
+          else ((nomad_client_remove_tls_enabled | bool) | ternary('https://127.0.0.1:4646', 'http://127.0.0.1:4646')))
         ~ '/v1/node/'
         ~ (nomad_client_remove_self_node_id_windows.stdout | trim)
         ~ '/allocations'
       }}
     method: GET
     headers: "{{ nomad_client_remove_nomad_api_headers }}"
+    validate_certs: false
   register: nomad_client_remove_self_allocations_windows
   changed_when: false
   failed_when: false
@@ -235,6 +279,7 @@
     - ansible_facts["os_family"] == "Windows"
     - nomad_client_remove_self_node_id_windows.rc == 0
     - (nomad_client_remove_self_node_id_windows.stdout | default('') | trim | length) > 0
+    - not (nomad_client_remove_tls_enabled | bool)
 
 - name: Normalize self node allocations response (Windows)
   ansible.builtin.set_fact:
@@ -247,6 +292,7 @@
     - ansible_facts["os_family"] == "Windows"
     - nomad_client_remove_self_node_id_windows.rc == 0
     - (nomad_client_remove_self_node_id_windows.stdout | default('') | trim | length) > 0
+    - not (nomad_client_remove_tls_enabled | bool)
 
 - name: Fail when active allocations remain on self node (Windows)
   ansible.builtin.assert:
@@ -271,6 +317,7 @@
     - ansible_facts["os_family"] == "Windows"
     - nomad_client_remove_self_node_id_windows.rc == 0
     - (nomad_client_remove_self_node_id_windows.stdout | default('') | trim | length) > 0
+    - not (nomad_client_remove_tls_enabled | bool)
 
 - name: Stop Nomad service (Linux)
   ansible.builtin.service:
@@ -415,10 +462,29 @@
     state: absent
   when: ansible_facts["os_family"] == "Windows"
 
+- name: Force-stop residual Nomad processes (Windows)
+  ansible.windows.win_shell: |
+    $nomadProcesses = Get-Process -Name 'nomad' -ErrorAction SilentlyContinue
+    if ($null -ne $nomadProcesses) {
+      $nomadProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
+      Start-Sleep -Seconds 2
+      Write-Output 'stopped'
+    } else {
+      Write-Output 'not-running'
+    }
+  register: nomad_client_remove_force_stop_windows
+  failed_when: false
+  changed_when: "'stopped' in (nomad_client_remove_force_stop_windows.stdout | default(''))"
+  when: ansible_facts["os_family"] == "Windows"
+
 - name: Remove Nomad binary (Windows)
   ansible.windows.win_file:
     path: "{{ nomad_client_remove_install_dir }}\\nomad.exe"
     state: absent
+  register: nomad_client_remove_binary_windows
+  retries: 6
+  delay: 2
+  until: nomad_client_remove_binary_windows is succeeded
   when: ansible_facts["os_family"] == "Windows"
 
 # --- Common cleanup ---

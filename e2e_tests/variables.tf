@@ -121,6 +121,80 @@ variable "nomad_region" {
   default     = "global"
 }
 
+variable "nomad_acl_enabled" {
+  type        = bool
+  description = "Enable Nomad ACLs in the self-hosted E2E Nomad server configuration."
+  default     = true
+}
+
+variable "nomad_tls_enabled" {
+  type        = bool
+  description = "Enable Nomad TLS for E2E server and clients."
+  default     = true
+}
+
+variable "nomad_tls_verify_https_client" {
+  type        = bool
+  description = "Require mTLS client certificates for Nomad HTTPS API when TLS is enabled."
+  default     = true
+}
+
+variable "nomad_tls_verify_server_hostname" {
+  type        = bool
+  description = "Enable Nomad role+region server hostname verification for outgoing TLS connections."
+  default     = true
+}
+
+variable "nomad_tls_ca_pem" {
+  type        = string
+  description = "Optional PEM-encoded Nomad TLS CA certificate. Required for external Nomad server mode when TLS is enabled."
+  default     = ""
+  sensitive   = true
+
+  validation {
+    condition = (
+      var.deploy_nomad_server
+      || !var.nomad_tls_enabled
+      || length(trimspace(var.nomad_tls_ca_pem)) > 0
+    )
+    error_message = "nomad_tls_ca_pem must be set when deploy_nomad_server is false and nomad_tls_enabled is true."
+  }
+}
+
+variable "nomad_tls_client_cert_pem" {
+  type        = string
+  description = "Optional PEM-encoded Nomad client certificate for HTTPS mTLS. Required for external Nomad server mode when nomad_tls_verify_https_client is true."
+  default     = ""
+  sensitive   = true
+
+  validation {
+    condition = (
+      var.deploy_nomad_server
+      || !var.nomad_tls_enabled
+      || !var.nomad_tls_verify_https_client
+      || length(trimspace(var.nomad_tls_client_cert_pem)) > 0
+    )
+    error_message = "nomad_tls_client_cert_pem must be set when deploy_nomad_server is false with TLS enabled and nomad_tls_verify_https_client is true."
+  }
+}
+
+variable "nomad_tls_client_key_pem" {
+  type        = string
+  description = "Optional PEM-encoded private key for nomad_tls_client_cert_pem. Required for external Nomad server mode when nomad_tls_verify_https_client is true."
+  default     = ""
+  sensitive   = true
+
+  validation {
+    condition = (
+      var.deploy_nomad_server
+      || !var.nomad_tls_enabled
+      || !var.nomad_tls_verify_https_client
+      || length(trimspace(var.nomad_tls_client_key_pem)) > 0
+    )
+    error_message = "nomad_tls_client_key_pem must be set when deploy_nomad_server is false with TLS enabled and nomad_tls_verify_https_client is true."
+  }
+}
+
 variable "nomad_edition" {
   type        = string
   description = "Nomad client edition for E2E install workflow (community or enterprise)."
@@ -143,6 +217,11 @@ variable "nomad_license" {
   description = "Optional single-line Nomad Enterprise license string for E2E install workflow."
   default     = ""
   sensitive   = true
+
+  validation {
+    condition     = lower(trimspace(var.nomad_edition)) != "enterprise" || length(trimspace(var.nomad_license)) > 0
+    error_message = "nomad_license must be set when nomad_edition is 'enterprise'."
+  }
 }
 
 variable "client_introduction_token" {

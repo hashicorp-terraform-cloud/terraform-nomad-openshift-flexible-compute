@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 E2E_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ARTIFACTS_DIR="${E2E_DIR}/.artifacts"
 TOKEN_FILE="${ARTIFACTS_DIR}/nomad_management_token.txt"
+NOMAD_CA_CERT_FILE="${ARTIFACTS_DIR}/nomad-agent-ca.pem"
+NOMAD_CLIENT_CERT_FILE="${ARTIFACTS_DIR}/global-cli-nomad.pem"
+NOMAD_CLIENT_KEY_FILE="${ARTIFACTS_DIR}/global-cli-nomad-key.pem"
 
 mkdir -p "${ARTIFACTS_DIR}"
 
@@ -15,12 +18,17 @@ if [[ -z "${NOMAD_ADDR_INPUT}" ]]; then
   if [[ "${deploy_nomad_server}" == "true" ]]; then
     nomad_server_public_ip="$(terraform -chdir="${E2E_DIR}" output -raw nomad_server_public_ip 2>/dev/null || true)"
     if [[ -n "${nomad_server_public_ip}" && "${nomad_server_public_ip}" != "null" ]]; then
-      NOMAD_ADDR_INPUT="http://${nomad_server_public_ip}:4646"
+      nomad_tls_enabled="$(terraform -chdir="${E2E_DIR}" output -raw nomad_tls_enabled 2>/dev/null || echo "false")"
+      if [[ "${nomad_tls_enabled}" == "true" ]]; then
+        NOMAD_ADDR_INPUT="https://${nomad_server_public_ip}:4646"
+      else
+        NOMAD_ADDR_INPUT="http://${nomad_server_public_ip}:4646"
+      fi
     fi
   fi
 
   if [[ -z "${NOMAD_ADDR_INPUT}" ]]; then
-    NOMAD_ADDR_INPUT="$(terraform -chdir="${E2E_DIR}" output -raw nomad_server_address || true)"
+    NOMAD_ADDR_INPUT="$(terraform -chdir="${E2E_DIR}" output -raw nomad_addr || true)"
   fi
 fi
 
@@ -34,7 +42,12 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-bootstrap_response="$(curl --fail --silent --show-error --request POST "${NOMAD_ADDR_INPUT%/}/v1/acl/bootstrap")"
+curl_args=(--fail --silent --show-error --request POST)
+if [[ -f "${NOMAD_CA_CERT_FILE}" && -f "${NOMAD_CLIENT_CERT_FILE}" && -f "${NOMAD_CLIENT_KEY_FILE}" ]]; then
+  curl_args+=(--cacert "${NOMAD_CA_CERT_FILE}" --cert "${NOMAD_CLIENT_CERT_FILE}" --key "${NOMAD_CLIENT_KEY_FILE}")
+fi
+
+bootstrap_response="$(curl "${curl_args[@]}" "${NOMAD_ADDR_INPUT%/}/v1/acl/bootstrap")"
 secret_id="$(echo "${bootstrap_response}" | jq -r '.SecretID // empty')"
 
 if [[ -z "${secret_id}" ]]; then

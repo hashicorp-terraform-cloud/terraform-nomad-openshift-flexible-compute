@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 E2E_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ARTIFACTS_DIR="${E2E_DIR}/.artifacts"
 TOKEN_FILE="${ARTIFACTS_DIR}/nomad_management_token.txt"
+NOMAD_CA_CERT_FILE="${ARTIFACTS_DIR}/nomad-agent-ca.pem"
+NOMAD_CLIENT_CERT_FILE="${ARTIFACTS_DIR}/global-cli-nomad.pem"
+NOMAD_CLIENT_KEY_FILE="${ARTIFACTS_DIR}/global-cli-nomad-key.pem"
 
 require_command() {
   local command_name="$1"
@@ -31,12 +34,18 @@ resolve_nomad_addr() {
       local nomad_server_public_ip
       nomad_server_public_ip="$(terraform -chdir="${E2E_DIR}" output -raw nomad_server_public_ip 2>/dev/null || true)"
       if [[ -n "${nomad_server_public_ip}" && "${nomad_server_public_ip}" != "null" ]]; then
-        nomad_addr_input="http://${nomad_server_public_ip}:4646"
+        local nomad_tls_enabled
+        nomad_tls_enabled="$(terraform -chdir="${E2E_DIR}" output -raw nomad_tls_enabled 2>/dev/null || echo "false")"
+        if [[ "${nomad_tls_enabled}" == "true" ]]; then
+          nomad_addr_input="https://${nomad_server_public_ip}:4646"
+        else
+          nomad_addr_input="http://${nomad_server_public_ip}:4646"
+        fi
       fi
     fi
 
     if [[ -z "${nomad_addr_input}" ]]; then
-      nomad_addr_input="$(terraform -chdir="${E2E_DIR}" output -raw nomad_server_address 2>/dev/null || true)"
+      nomad_addr_input="$(terraform -chdir="${E2E_DIR}" output -raw nomad_addr 2>/dev/null || true)"
     fi
   fi
 
@@ -54,10 +63,25 @@ resolve_nomad_addr() {
 
 build_curl_args() {
   local nomad_token="$1"
+  local nomad_tls_enabled
+  nomad_tls_enabled="$(terraform -chdir="${E2E_DIR}" output -raw nomad_tls_enabled 2>/dev/null || echo "false")"
 
   CURL_ARGS=(--fail --silent --show-error)
   if [[ -n "${nomad_token}" ]]; then
     CURL_ARGS+=(--header "X-Nomad-Token: ${nomad_token}")
+  fi
+  if [[ "${nomad_tls_enabled}" == "true" ]]; then
+    if [[ ! -f "${NOMAD_CA_CERT_FILE}" ]]; then
+      terraform -chdir="${E2E_DIR}" output -raw nomad_tls_ca_pem > "${NOMAD_CA_CERT_FILE}"
+    fi
+    if [[ ! -f "${NOMAD_CLIENT_CERT_FILE}" ]]; then
+      terraform -chdir="${E2E_DIR}" output -raw nomad_tls_client_cert_pem > "${NOMAD_CLIENT_CERT_FILE}"
+    fi
+    if [[ ! -f "${NOMAD_CLIENT_KEY_FILE}" ]]; then
+      terraform -chdir="${E2E_DIR}" output -raw nomad_tls_client_key_pem > "${NOMAD_CLIENT_KEY_FILE}"
+      chmod 600 "${NOMAD_CLIENT_KEY_FILE}"
+    fi
+    CURL_ARGS+=(--cacert "${NOMAD_CA_CERT_FILE}" --cert "${NOMAD_CLIENT_CERT_FILE}" --key "${NOMAD_CLIENT_KEY_FILE}")
   fi
 }
 

@@ -6,8 +6,53 @@ E2E_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ARTIFACTS_DIR="${E2E_DIR}/.artifacts"
 INVENTORY_FILE="${ARTIFACTS_DIR}/inventory.ini"
 EXTRA_VARS_FILE="${ARTIFACTS_DIR}/extra_vars.yml"
+TOKEN_FILE="${ARTIFACTS_DIR}/nomad_management_token.txt"
+NOMAD_CA_CERT_FILE="${ARTIFACTS_DIR}/nomad-agent-ca.pem"
+NOMAD_CLIENT_CERT_FILE="${ARTIFACTS_DIR}/global-cli-nomad.pem"
+NOMAD_CLIENT_KEY_FILE="${ARTIFACTS_DIR}/global-cli-nomad-key.pem"
 
 mkdir -p "${ARTIFACTS_DIR}"
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required to parse Terraform outputs." >&2
+  exit 1
+fi
+
+if ! TF_OUTPUTS_JSON="$(terraform -chdir="${E2E_DIR}" output -json)"; then
+  echo "Failed to retrieve Terraform outputs from ${E2E_DIR}. Ensure terraform apply completed successfully." >&2
+  exit 1
+fi
+
+terraform_output_optional() {
+  local output_name="$1"
+
+  jq -r --arg name "${output_name}" '
+    if has($name) then
+      .[$name].value
+      | if . == null then "null"
+        elif type == "string" then .
+        else tostring
+        end
+    else
+      empty
+    end
+  ' <<<"${TF_OUTPUTS_JSON}"
+}
+
+terraform_output_with_default() {
+  local output_name="$1"
+  local default_value="$2"
+  local output_value
+
+  output_value="$(terraform_output_optional "${output_name}")"
+
+  if [[ -z "${output_value}" ]]; then
+    printf '%s\n' "${default_value}"
+    return 0
+  fi
+
+  printf '%s\n' "${output_value}"
+}
 
 require_file() {
   local file_path="$1"
@@ -32,7 +77,7 @@ write_generated_private_key_if_needed() {
   fi
 
   local generated_private_key
-  generated_private_key="$(terraform -chdir="${E2E_DIR}" output -raw generated_ssh_private_key_pem 2>/dev/null || true)"
+  generated_private_key="$(terraform_output_optional "generated_ssh_private_key_pem")"
 
   if [[ -z "${generated_private_key}" || "${generated_private_key}" == "null" ]]; then
     echo "No SSH private key file found at ${private_key_file}, and Terraform did not return generated_ssh_private_key_pem." >&2
@@ -90,7 +135,7 @@ wait_for_windows_winrm_ready() {
   local windows_ip="$1"
 
   local max_attempts
-  max_attempts="${E2E_WINDOWS_WAIT_MAX_ATTEMPTS:-60}"
+  max_attempts="${E2E_WINDOWS_WAIT_MAX_ATTEMPTS:-10}"
   local sleep_seconds
   sleep_seconds="${E2E_WINDOWS_WAIT_SLEEP_SECONDS:-10}"
   local attempt
@@ -130,7 +175,7 @@ wait_for_ssh_ready() {
   local host_label="$2"
 
   local max_attempts
-  max_attempts="${E2E_SSH_WAIT_MAX_ATTEMPTS:-60}"
+  max_attempts="${E2E_SSH_WAIT_MAX_ATTEMPTS:-10}"
   local sleep_seconds
   sleep_seconds="${E2E_SSH_WAIT_SLEEP_SECONDS:-10}"
   local attempt
@@ -154,24 +199,45 @@ wait_for_ssh_ready() {
 
 wait_for_nomad_server_ready() {
   local deploy_nomad_server
-  deploy_nomad_server="$(terraform -chdir="${E2E_DIR}" output -raw deploy_nomad_server 2>/dev/null || echo "false")"
+  deploy_nomad_server="$(terraform_output_with_default "deploy_nomad_server" "false")"
 
   if [[ "${deploy_nomad_server}" != "true" ]]; then
     return 0
   fi
 
   local nomad_server_public_ip
-  nomad_server_public_ip="$(terraform -chdir="${E2E_DIR}" output -raw nomad_server_public_ip 2>/dev/null || true)"
+  nomad_server_public_ip="$(terraform_output_optional "nomad_server_public_ip")"
 
   if [[ -z "${nomad_server_public_ip}" || "${nomad_server_public_ip}" == "null" ]]; then
     echo "Unable to determine nomad_server_public_ip for readiness check." >&2
     exit 1
   fi
 
+  local nomad_tls_enabled
+  nomad_tls_enabled="$(terraform_output_with_default "nomad_tls_enabled" "false")"
+
   local nomad_addr
-  nomad_addr="http://${nomad_server_public_ip}:4646"
+  if [[ "${nomad_tls_enabled}" == "true" ]]; then
+    nomad_addr="https://${nomad_server_public_ip}:4646"
+  else
+    nomad_addr="http://${nomad_server_public_ip}:4646"
+  fi
+
+  local nomad_ca_cert
+  nomad_ca_cert="$(terraform_output_optional "nomad_tls_ca_pem")"
+  local nomad_client_cert
+  nomad_client_cert="$(terraform_output_optional "nomad_tls_client_cert_pem")"
+  local nomad_client_key
+  nomad_client_key="$(terraform_output_optional "nomad_tls_client_key_pem")"
+
+  if [[ "${nomad_tls_enabled}" == "true" ]]; then
+    printf '%s\n' "${nomad_ca_cert}" > "${NOMAD_CA_CERT_FILE}"
+    printf '%s\n' "${nomad_client_cert}" > "${NOMAD_CLIENT_CERT_FILE}"
+    printf '%s\n' "${nomad_client_key}" > "${NOMAD_CLIENT_KEY_FILE}"
+    chmod 600 "${NOMAD_CLIENT_KEY_FILE}"
+  fi
   local max_attempts
-  max_attempts="${E2E_NOMAD_WAIT_MAX_ATTEMPTS:-30}"
+  max_attempts="${E2E_NOMAD_WAIT_MAX_ATTEMPTS:-10}"
   local sleep_seconds
   sleep_seconds="${E2E_NOMAD_WAIT_SLEEP_SECONDS:-10}"
   local attempt
@@ -179,7 +245,13 @@ wait_for_nomad_server_ready() {
 
   while [[ ${attempt} -le ${max_attempts} ]]; do
     local leader
-    leader="$(curl --silent --show-error --max-time 5 "${nomad_addr}/v1/status/leader" || true)"
+    local curl_args
+    curl_args=(--silent --show-error --max-time 5)
+    if [[ "${nomad_tls_enabled}" == "true" ]]; then
+      curl_args+=(--cacert "${NOMAD_CA_CERT_FILE}" --cert "${NOMAD_CLIENT_CERT_FILE}" --key "${NOMAD_CLIENT_KEY_FILE}")
+    fi
+
+    leader="$(curl "${curl_args[@]}" "${nomad_addr}/v1/status/leader" || true)"
     if [[ -n "${leader}" && "${leader}" != '""' ]]; then
       echo "Nomad server is ready at ${nomad_addr} (leader: ${leader})."
       return 0
@@ -199,22 +271,22 @@ wait_for_nomad_server_ready() {
 
 wait_for_nomad_server_ready
 
-linux_ip="$(terraform -chdir="${E2E_DIR}" output -raw linux_public_ip)"
-redhat_ip="$(terraform -chdir="${E2E_DIR}" output -raw redhat_public_ip 2>/dev/null || true)"
-windows_ip="$(terraform -chdir="${E2E_DIR}" output -raw windows_public_ip)"
-linux_user="$(terraform -chdir="${E2E_DIR}" output -raw linux_ssh_user)"
-redhat_user="$(terraform -chdir="${E2E_DIR}" output -raw redhat_ssh_user 2>/dev/null || echo "${linux_user}")"
-windows_user="$(terraform -chdir="${E2E_DIR}" output -raw windows_admin_username)"
-windows_password_data="$(terraform -chdir="${E2E_DIR}" output -raw windows_password_data || true)"
-nomad_server_address="$(terraform -chdir="${E2E_DIR}" output -raw nomad_server_address)"
-nomad_datacenter="$(terraform -chdir="${E2E_DIR}" output -raw nomad_datacenter)"
-nomad_region="$(terraform -chdir="${E2E_DIR}" output -raw nomad_region)"
-nomad_edition_tf="$(terraform -chdir="${E2E_DIR}" output -raw nomad_edition 2>/dev/null || true)"
-nomad_version_tf="$(terraform -chdir="${E2E_DIR}" output -raw nomad_version 2>/dev/null || true)"
-nomad_license_tf="$(terraform -chdir="${E2E_DIR}" output -raw nomad_license 2>/dev/null || true)"
-inventory_ini_tf="$(terraform -chdir="${E2E_DIR}" output -raw inventory_ini 2>/dev/null || true)"
-extra_vars_yaml_tf="$(terraform -chdir="${E2E_DIR}" output -raw extra_vars_yaml 2>/dev/null || true)"
-client_intro_token="$(terraform -chdir="${E2E_DIR}" output -raw client_introduction_token || true)"
+linux_ip="$(terraform_output_optional "linux_public_ip")"
+redhat_ip="$(terraform_output_optional "redhat_public_ip")"
+windows_ip="$(terraform_output_optional "windows_public_ip")"
+linux_user="$(terraform_output_optional "linux_ssh_user")"
+redhat_user="$(terraform_output_with_default "redhat_ssh_user" "${linux_user}")"
+windows_user="$(terraform_output_optional "windows_admin_username")"
+windows_password_data="$(terraform_output_optional "windows_password_data")"
+nomad_server_address="$(terraform_output_optional "nomad_server_address")"
+nomad_datacenter="$(terraform_output_optional "nomad_datacenter")"
+nomad_region="$(terraform_output_optional "nomad_region")"
+nomad_edition_tf="$(terraform_output_optional "nomad_edition")"
+nomad_version_tf="$(terraform_output_optional "nomad_version")"
+nomad_license_tf="$(terraform_output_optional "nomad_license")"
+inventory_ini_tf="$(terraform_output_optional "inventory_ini")"
+extra_vars_yaml_tf="$(terraform_output_optional "extra_vars_yaml")"
+client_intro_token="$(terraform_output_optional "client_introduction_token")"
 ssh_private_key_path="${E2E_SSH_PRIVATE_KEY_FILE:-${E2E_DIR}/.artifacts/e2e_rsa.pem}"
 
 write_generated_private_key_if_needed "${ssh_private_key_path}"
@@ -258,7 +330,14 @@ if [[ -z "${extra_vars_yaml_tf}" || "${extra_vars_yaml_tf}" == "null" ]]; then
 fi
 
 inventory_ini_local="${inventory_ini_tf}"
-inventory_ini_local="${inventory_ini_local//${E2E_DIR//\//\/}\/\.artifacts\/e2e_rsa\.pem/${ssh_private_key_path}}"
+
+default_private_key_path="${E2E_DIR}/.artifacts/e2e_rsa.pem"
+default_private_key_path_escaped="${default_private_key_path//\//\\/}"
+relative_private_key_path="./.artifacts/e2e_rsa.pem"
+relative_private_key_path_escaped="${relative_private_key_path//\//\\/}"
+
+inventory_ini_local="${inventory_ini_local//${default_private_key_path_escaped}/${ssh_private_key_path}}"
+inventory_ini_local="${inventory_ini_local//${relative_private_key_path_escaped}/${ssh_private_key_path}}"
 
 printf '%s\n' "${inventory_ini_local}" > "${INVENTORY_FILE}"
 printf '%s\n' "${extra_vars_yaml_tf}" > "${EXTRA_VARS_FILE}"
@@ -274,10 +353,23 @@ fi
 if [[ -n "${nomad_license_e2e}" ]]; then
   nomad_license_e2e_escaped="${nomad_license_e2e//\\/\\\\}"
   nomad_license_e2e_escaped="${nomad_license_e2e_escaped//\"/\\\"}"
-  if grep -q '^nomad_license:' "${EXTRA_VARS_FILE}"; then
-    sed -i.bak -E "s|^nomad_license: .*|nomad_license: \"${nomad_license_e2e_escaped}\"|" "${EXTRA_VARS_FILE}" && rm -f "${EXTRA_VARS_FILE}.bak"
+  if grep -Eq '^[[:space:]]*"?nomad_license"?:' "${EXTRA_VARS_FILE}"; then
+    sed -i.bak -E "s|^[[:space:]]*\"?nomad_license\"?: .*|\"nomad_license\": \"${nomad_license_e2e_escaped}\"|" "${EXTRA_VARS_FILE}" && rm -f "${EXTRA_VARS_FILE}.bak"
   else
-    echo "nomad_license: \"${nomad_license_e2e_escaped}\"" >> "${EXTRA_VARS_FILE}"
+    echo "\"nomad_license\": \"${nomad_license_e2e_escaped}\"" >> "${EXTRA_VARS_FILE}"
+  fi
+fi
+
+if [[ -f "${TOKEN_FILE}" ]]; then
+  nomad_token="$(cat "${TOKEN_FILE}")"
+  if [[ -n "${nomad_token}" ]]; then
+    nomad_token_escaped="${nomad_token//\\/\\\\}"
+    nomad_token_escaped="${nomad_token_escaped//\"/\\\"}"
+    if grep -Eq '^[[:space:]]*"?nomad_token"?:' "${EXTRA_VARS_FILE}"; then
+      sed -i.bak -E "s|^[[:space:]]*\"?nomad_token\"?: .*|\"nomad_token\": \"${nomad_token_escaped}\"|" "${EXTRA_VARS_FILE}" && rm -f "${EXTRA_VARS_FILE}.bak"
+    else
+      echo "\"nomad_token\": \"${nomad_token_escaped}\"" >> "${EXTRA_VARS_FILE}"
+    fi
   fi
 fi
 

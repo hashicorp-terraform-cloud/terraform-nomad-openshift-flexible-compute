@@ -7,6 +7,22 @@
     nomad_intro_token_expected: "{{ (nomad_client_intro_token | default('') | trim | length) > 0 }}"
     nomad_enterprise_expected: "{{ (nomad_edition | default('community') | lower) == 'enterprise' }}"
     nomad_license_expected: "{{ nomad_enterprise_expected and ((nomad_license | default('') | trim | length) > 0) }}"
+    nomad_tls_expected: "{{ nomad_tls_enabled | default(false) | bool }}"
+    nomad_acl_expected: "{{ nomad_acl_enabled | default(false) | bool }}"
+    nomad_local_ca_artifact: "{{ (playbook_dir | dirname) ~ '/.artifacts/nomad-agent-ca.pem' }}"
+    nomad_local_client_cert_artifact: "{{ (playbook_dir | dirname) ~ '/.artifacts/global-cli-nomad.pem' }}"
+    nomad_local_client_key_artifact: "{{ (playbook_dir | dirname) ~ '/.artifacts/global-cli-nomad-key.pem' }}"
+    nomad_assert_addr: >-
+      {{
+        (
+          ('https://' if nomad_tls_expected else 'http://')
+          ~ (nomad_server_public_ip | default('') | trim)
+          ~ ':4646'
+        )
+        if (nomad_server_public_ip | default('') | trim | length) > 0
+        else
+        (nomad_addr | default(('https' if nomad_tls_expected else 'http') ~ '://' ~ nomad_server_address ~ ':4646'))
+      }}
 
   tasks:
     - name: Set expected Nomad paths
@@ -17,6 +33,12 @@
           {{ 'C:\\ProgramData\\Nomad\\config\\license.hclic' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/license.hclic' }}
         nomad_intro_token_path: >-
           {{ 'C:\\ProgramData\\Nomad\\data\\client\\intro_token.jwt' if ansible_facts['os_family'] == 'Windows' else '/opt/nomad/client/intro_token.jwt' }}
+        nomad_tls_ca_path: >-
+          {{ 'C:\\ProgramData\\Nomad\\config\\tls\\nomad-agent-ca.pem' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/tls/nomad-agent-ca.pem' }}
+        nomad_tls_client_cert_path: >-
+          {{ 'C:\\ProgramData\\Nomad\\config\\tls\\global-client-nomad.pem' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/tls/global-client-nomad.pem' }}
+        nomad_tls_client_key_path: >-
+          {{ 'C:\\ProgramData\\Nomad\\config\\tls\\global-client-nomad-key.pem' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/tls/global-client-nomad-key.pem' }}
         nomad_binary_path_windows: "{{ 'C:\\Program Files\\Nomad\\nomad.exe' }}"
 
     - name: Gather Linux service facts
@@ -126,6 +148,16 @@
         fail_msg: "Nomad server address not found in POSIX config."
       when: ansible_facts['os_family'] != 'Windows'
 
+    - name: Assert TLS stanza is rendered (POSIX)
+      ansible.builtin.assert:
+        that:
+          - >-
+            ('tls {' in (nomad_config_posix_content.content | b64decode)) == nomad_tls_expected
+          - >-
+            (('http = true' in (nomad_config_posix_content.content | b64decode)) and ('rpc  = true' in (nomad_config_posix_content.content | b64decode))) == nomad_tls_expected
+        fail_msg: "POSIX Nomad TLS configuration stanza does not match expected state."
+      when: ansible_facts['os_family'] != 'Windows'
+
     - name: Check Nomad config file (Windows)
       ansible.windows.win_stat:
         path: "{{ nomad_config_path }}"
@@ -151,6 +183,65 @@
         that:
           - "nomad_server_address in nomad_config_windows_content.stdout"
         fail_msg: "Nomad server address not found in Windows config."
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Assert TLS stanza is rendered (Windows)
+      ansible.builtin.assert:
+        that:
+          - "('tls {' in nomad_config_windows_content.stdout) == nomad_tls_expected"
+          - >-
+            ((('http = true' in nomad_config_windows_content.stdout) and ('rpc  = true' in nomad_config_windows_content.stdout))) == nomad_tls_expected
+        fail_msg: "Windows Nomad TLS configuration stanza does not match expected state."
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Check Nomad TLS files (POSIX)
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ nomad_tls_ca_path }}"
+        - "{{ nomad_tls_client_cert_path }}"
+        - "{{ nomad_tls_client_key_path }}"
+      register: nomad_tls_files_posix
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Assert Nomad TLS files state (POSIX)
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              nomad_tls_files_posix.results
+              | map(attribute='stat.exists')
+              | list
+              | select('equalto', true)
+              | list
+              | length
+            ) == (3 if nomad_tls_expected else 0)
+        fail_msg: "POSIX Nomad TLS file state does not match expected value."
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Check Nomad TLS files (Windows)
+      ansible.windows.win_stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ nomad_tls_ca_path }}"
+        - "{{ nomad_tls_client_cert_path }}"
+        - "{{ nomad_tls_client_key_path }}"
+      register: nomad_tls_files_windows
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Assert Nomad TLS files state (Windows)
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              nomad_tls_files_windows.results
+              | map(attribute='stat.exists')
+              | list
+              | select('equalto', true)
+              | list
+              | length
+            ) == (3 if nomad_tls_expected else 0)
+        fail_msg: "Windows Nomad TLS file state does not match expected value."
       when: ansible_facts['os_family'] == 'Windows'
 
     - name: Check Nomad Enterprise license file (POSIX)
@@ -204,3 +295,62 @@
           - nomad_intro_token_windows.stat.exists == nomad_intro_token_expected
         fail_msg: "Windows introduction token file state does not match expected value."
       when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Query Nomad API without token (controller)
+      ansible.builtin.uri:
+        url: "{{ nomad_assert_addr }}/v1/nodes"
+        method: GET
+        ca_path: "{{ nomad_tls_expected | ternary(nomad_local_ca_artifact, omit) }}"
+        client_cert: "{{ nomad_tls_expected | ternary(nomad_local_client_cert_artifact, omit) }}"
+        client_key: "{{ nomad_tls_expected | ternary(nomad_local_client_key_artifact, omit) }}"
+        validate_certs: false
+      register: nomad_nodes_without_token
+      changed_when: false
+      failed_when: false
+      become: false
+      delegate_to: localhost
+      run_once: true
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Assert unauthenticated Nomad API behavior
+      ansible.builtin.assert:
+        that:
+          - ((nomad_nodes_without_token.status | int) != 200) == nomad_acl_expected
+        fail_msg: >-
+          Unexpected unauthenticated Nomad API result.
+          Expected non-200 when ACL is enabled={{ nomad_acl_expected }}, got status={{ nomad_nodes_without_token.status | default('n/a') }}.
+      run_once: true
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Query Nomad API with token (controller)
+      ansible.builtin.uri:
+        url: "{{ nomad_assert_addr }}/v1/nodes"
+        method: GET
+        headers:
+          X-Nomad-Token: "{{ nomad_token | default('') }}"
+        ca_path: "{{ nomad_tls_expected | ternary(nomad_local_ca_artifact, omit) }}"
+        client_cert: "{{ nomad_tls_expected | ternary(nomad_local_client_cert_artifact, omit) }}"
+        client_key: "{{ nomad_tls_expected | ternary(nomad_local_client_key_artifact, omit) }}"
+        validate_certs: false
+      register: nomad_nodes_with_token
+      changed_when: false
+      failed_when: false
+      become: false
+      delegate_to: localhost
+      run_once: true
+      when:
+        - ansible_facts['os_family'] != 'Windows'
+        - nomad_acl_expected
+
+    - name: Assert authenticated Nomad API succeeds when ACL is enabled
+      ansible.builtin.assert:
+        that:
+          - (nomad_token | default('') | trim | length) > 0
+          - nomad_nodes_with_token.status | int == 200
+        fail_msg: >-
+          Expected authenticated Nomad API success with ACL enabled.
+          Ensure nomad_token is propagated to extra vars.
+      run_once: true
+      when:
+        - ansible_facts['os_family'] != 'Windows'
+        - nomad_acl_expected
