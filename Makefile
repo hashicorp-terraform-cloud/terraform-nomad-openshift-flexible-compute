@@ -131,22 +131,10 @@ e2e-bootstrap-acl-auto:
 	@deploy_nomad_server="$$(terraform -chdir=e2e_tests output -raw deploy_nomad_server 2>/dev/null || echo false)"; \
 	nomad_acl_enabled="$$(terraform -chdir=e2e_tests output -raw nomad_acl_enabled 2>/dev/null || echo false)"; \
 	if [ "$$deploy_nomad_server" = "true" ] && [ "$$nomad_acl_enabled" = "true" ]; then \
-		if [ -s "$(E2E_ARTIFACTS_DIR)/nomad_management_token.txt" ]; then \
-			echo "ACL bootstrap token already present; reusing existing token artifact."; \
-			$(MAKE) e2e-generate-inventory; \
-			exit 0; \
-		fi; \
-		if [ -n "$$NOMAD_TOKEN" ]; then \
-			echo "Using NOMAD_TOKEN from environment for ACL-authenticated E2E flow."; \
-			mkdir -p "$(E2E_ARTIFACTS_DIR)"; \
-			printf "%s" "$$NOMAD_TOKEN" > "$(E2E_ARTIFACTS_DIR)/nomad_management_token.txt"; \
-			$(MAKE) e2e-generate-inventory; \
-			exit 0; \
-		fi; \
-		echo "ACL is enabled for self-hosted E2E Nomad server; bootstrapping management token..."; \
+		echo "ACL is enabled for self-hosted E2E Nomad server; ensuring ACL artifacts and intro token..."; \
 		$(MAKE) e2e-generate-inventory; \
 		if ! bash e2e_tests/scripts/bootstrap_acl.sh; then \
-			echo "ACL bootstrap failed. If the cluster is already bootstrapped, set NOMAD_TOKEN in your environment and retry."; \
+			echo "ACL bootstrap/token preparation failed. If the cluster is already bootstrapped, set NOMAD_TOKEN in your environment and retry."; \
 			exit 1; \
 		fi; \
 		$(MAKE) e2e-generate-inventory; \
