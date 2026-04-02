@@ -41,9 +41,19 @@
         nomad_tls_ca_path: >-
           {{ 'C:\\ProgramData\\Nomad\\config\\tls\\nomad-agent-ca.pem' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/tls/nomad-agent-ca.pem' }}
         nomad_tls_client_cert_path: >-
-          {{ 'C:\\ProgramData\\Nomad\\config\\tls\\global-client-nomad.pem' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/tls/global-client-nomad.pem' }}
+          {{
+            'C:\\ProgramData\\Nomad\\config\\tls\\global-client-nomad.pem'
+            if ansible_facts['os_family'] == 'Windows'
+            else
+            '/etc/nomad.d/tls/global-client-nomad.pem'
+          }}
         nomad_tls_client_key_path: >-
-          {{ 'C:\\ProgramData\\Nomad\\config\\tls\\global-client-nomad-key.pem' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/tls/global-client-nomad-key.pem' }}
+          {{
+            'C:\\ProgramData\\Nomad\\config\\tls\\global-client-nomad-key.pem'
+            if ansible_facts['os_family'] == 'Windows'
+            else
+            '/etc/nomad.d/tls/global-client-nomad-key.pem'
+          }}
         nomad_binary_path_windows: "{{ 'C:\\Program Files\\Nomad\\nomad.exe' }}"
 
     - name: Gather Linux service facts
@@ -159,7 +169,15 @@
           - >-
             ('tls {' in (nomad_config_posix_content.content | b64decode)) == nomad_tls_expected
           - >-
-            (('http = true' in (nomad_config_posix_content.content | b64decode)) and ('rpc  = true' in (nomad_config_posix_content.content | b64decode))) == nomad_tls_expected
+            (
+              (
+                'http = true' in (nomad_config_posix_content.content | b64decode)
+              )
+              and
+              (
+                'rpc  = true' in (nomad_config_posix_content.content | b64decode)
+              )
+            ) == nomad_tls_expected
         fail_msg: "POSIX Nomad TLS configuration stanza does not match expected state."
       when: ansible_facts['os_family'] != 'Windows'
 
@@ -301,7 +319,7 @@
         fail_msg: "Windows introduction token file state does not match expected value."
       when: ansible_facts['os_family'] == 'Windows'
 
-    - name: Query Nomad API without token (controller)
+    - name: Query Nomad API without token (controller) # noqa: run-once[task]
       ansible.builtin.uri:
         url: "{{ nomad_assert_addr }}/v1/nodes"
         method: GET
@@ -317,7 +335,7 @@
       run_once: true
       when: ansible_facts['os_family'] != 'Windows'
 
-    - name: Assert unauthenticated Nomad API behavior
+    - name: Assert unauthenticated Nomad API behavior # noqa: run-once[task]
       ansible.builtin.assert:
         that:
           - ((nomad_nodes_without_token.status | int) != 200) == nomad_acl_expected
@@ -327,7 +345,7 @@
       run_once: true
       when: ansible_facts['os_family'] != 'Windows'
 
-    - name: Query Nomad API with token (controller)
+    - name: Query Nomad API with token (controller) # noqa: run-once[task]
       ansible.builtin.uri:
         url: "{{ nomad_assert_addr }}/v1/nodes"
         method: GET
@@ -347,7 +365,7 @@
         - ansible_facts['os_family'] != 'Windows'
         - nomad_acl_expected
 
-    - name: Assert authenticated Nomad API succeeds when ACL is enabled
+    - name: Assert authenticated Nomad API succeeds when ACL is enabled # noqa: run-once[task]
       ansible.builtin.assert:
         that:
           - (nomad_token | default('') | trim | length) > 0

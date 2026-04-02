@@ -74,7 +74,7 @@ ansible-lint: e2e-venv
 e2e: e2e-init e2e-apply e2e-install e2e-assert-install e2e-run-test-jobs
 # e2e-run-remove e2e-assert-remove
 
-e2e-check: e2e-terraform-check e2e-ansible-check
+e2e-check: e2e-terraform-check e2e-ansible-check e2e-ansible-lint
 
 e2e-terraform-check: e2e-terraform-fmt-check e2e-terraform-validate
 
@@ -93,6 +93,9 @@ e2e-ansible-check: e2e-venv
 	trap 'rm -f "$$tmp_inventory"' EXIT; \
 	$(E2E_VENV_PATH_PREFIX) ansible-playbook --inventory "$$tmp_inventory" --syntax-check e2e_tests/ansible/assert_install.yml; \
 	$(E2E_VENV_PATH_PREFIX) ansible-playbook --inventory "$$tmp_inventory" --syntax-check e2e_tests/ansible/assert_remove.yml
+
+e2e-ansible-lint: e2e-venv
+	$(E2E_VENV_PATH_PREFIX) ansible-lint e2e_tests/ansible/assert_install.yml e2e_tests/ansible/assert_remove.yml
 
 e2e-remove:
 	-terraform -chdir=e2e_tests destroy -auto-approve
