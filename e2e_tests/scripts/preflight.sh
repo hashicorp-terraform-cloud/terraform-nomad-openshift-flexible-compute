@@ -1,18 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-require_command() {
-  local command_name="$1"
-  local guidance="$2"
-
-  if ! command -v "${command_name}" >/dev/null 2>&1; then
-    echo "${command_name} is required for E2E execution." >&2
-    if [[ -n "${guidance}" ]]; then
-      echo "${guidance}" >&2
-    fi
-    exit 1
-  fi
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./common.sh
+source "${SCRIPT_DIR}/common.sh"
 
 check_python_module() {
   local python_executable="$1"
@@ -28,17 +19,27 @@ check_python_module() {
 }
 
 detect_ansible_python() {
+  local ansible_version_output
+  if ! ansible_version_output="$(ansible --version 2>/dev/null)"; then
+    log_error "Failed to run 'ansible --version'."
+    log_error "Ensure Ansible is correctly installed and available on PATH."
+    exit 1
+  fi
+
   local ansible_python
-  ansible_python="$(ansible --version | sed -nE 's/.*\((\/[^)]*python[^)]*)\).*/\1/p' | tail -n 1)"
+  ansible_python="$(sed -nE 's/.*\((\/[^)]*python[^)]*)\).*/\1/p' <<<"${ansible_version_output}" | tail -n 1)"
 
   if [[ -n "${ansible_python}" && -x "${ansible_python}" ]]; then
     printf '%s\n' "${ansible_python}"
     return 0
   fi
 
+  log_warn "Could not detect Ansible Python interpreter from 'ansible --version'; defaulting to python3."
+
   printf '%s\n' "python3"
 }
 
+require_command "ansible" "Install Ansible and ensure it is on PATH."
 require_command "ansible-playbook" "Install Ansible and ensure it is on PATH."
 require_command "python3" "Install Python 3 and ensure it is on PATH."
 

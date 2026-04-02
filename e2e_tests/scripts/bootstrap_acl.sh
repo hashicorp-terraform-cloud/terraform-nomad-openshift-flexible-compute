@@ -10,61 +10,25 @@ NOMAD_CA_CERT_FILE="${ARTIFACTS_DIR}/nomad-agent-ca.pem"
 NOMAD_CLIENT_CERT_FILE="${ARTIFACTS_DIR}/global-cli-nomad.pem"
 NOMAD_CLIENT_KEY_FILE="${ARTIFACTS_DIR}/global-cli-nomad-key.pem"
 
-mkdir -p "${ARTIFACTS_DIR}"
+# shellcheck source=./common.sh
+source "${SCRIPT_DIR}/common.sh"
 
-if ! command -v jq >/dev/null 2>&1; then
-  echo "jq is required for bootstrap_acl.sh" >&2
-  exit 1
-fi
+ensure_artifacts_dir "${ARTIFACTS_DIR}"
 
-TF_OUTPUTS_JSON=""
-if ! TF_OUTPUTS_JSON="$(terraform -chdir="${E2E_DIR}" output -json 2>/dev/null)"; then
-  TF_OUTPUTS_JSON=""
-fi
+require_command "terraform" "Install Terraform and ensure it is on PATH."
+require_command "jq" "Install jq and ensure it is on PATH."
+require_command "curl" "Install curl and ensure it is on PATH."
 
-terraform_output_optional() {
-  local output_name="$1"
-
-  if [[ -z "${TF_OUTPUTS_JSON}" ]]; then
-    return 0
-  fi
-
-  jq -r --arg name "${output_name}" '
-    if has($name) then
-      .[$name].value
-      | if . == null then "null"
-        elif type == "string" then .
-        else tostring
-        end
-    else
-      empty
-    end
-  ' <<<"${TF_OUTPUTS_JSON}"
-}
-
-terraform_output_with_default() {
-  local output_name="$1"
-  local default_value="$2"
-  local output_value
-
-  output_value="$(terraform_output_optional "${output_name}")"
-
-  if [[ -z "${output_value}" ]]; then
-    printf '%s\n' "${default_value}"
-    return 0
-  fi
-
-  printf '%s\n' "${output_value}"
-}
+ensure_tf_outputs_json || true
 
 NOMAD_ADDR_INPUT="${1:-${NOMAD_ADDR:-}}"
 if [[ -z "${NOMAD_ADDR_INPUT}" ]]; then
-  deploy_nomad_server="$(terraform_output_with_default "deploy_nomad_server" "false")"
+  deploy_nomad_server="$(tf_output_with_default "deploy_nomad_server" "false")"
 
   if [[ "${deploy_nomad_server}" == "true" ]]; then
-    nomad_server_public_ip="$(terraform_output_optional "nomad_server_public_ip")"
+    nomad_server_public_ip="$(tf_output_optional "nomad_server_public_ip")"
     if [[ -n "${nomad_server_public_ip}" && "${nomad_server_public_ip}" != "null" ]]; then
-      nomad_tls_enabled="$(terraform_output_with_default "nomad_tls_enabled" "false")"
+      nomad_tls_enabled="$(tf_output_with_default "nomad_tls_enabled" "false")"
       if [[ "${nomad_tls_enabled}" == "true" ]]; then
         NOMAD_ADDR_INPUT="https://${nomad_server_public_ip}:4646"
       else
@@ -74,7 +38,7 @@ if [[ -z "${NOMAD_ADDR_INPUT}" ]]; then
   fi
 
   if [[ -z "${NOMAD_ADDR_INPUT}" ]]; then
-    NOMAD_ADDR_INPUT="$(terraform_output_optional "nomad_addr")"
+    NOMAD_ADDR_INPUT="$(tf_output_optional "nomad_addr")"
   fi
 fi
 
@@ -88,7 +52,7 @@ if [[ -f "${NOMAD_CA_CERT_FILE}" && -f "${NOMAD_CLIENT_CERT_FILE}" && -f "${NOMA
   curl_args+=(--cacert "${NOMAD_CA_CERT_FILE}" --cert "${NOMAD_CLIENT_CERT_FILE}" --key "${NOMAD_CLIENT_KEY_FILE}")
 fi
 
-configured_intro_token="$(terraform_output_optional "client_introduction_token")"
+configured_intro_token="$(tf_output_optional "client_introduction_token")"
 configured_intro_token="${configured_intro_token//[$'\r\n']/}"
 
 secret_id=""
@@ -108,7 +72,7 @@ else
 
   if [[ ${bootstrap_exit_code} -ne 0 ]]; then
     echo "Failed to bootstrap ACLs at ${NOMAD_ADDR_INPUT%/}/v1/acl/bootstrap:" >&2
-    echo "${bootstrap_response}" >&2
+    echo "curl exited with status ${bootstrap_exit_code}. Response details were suppressed to avoid leaking sensitive content." >&2
     echo "If ACLs were already bootstrapped, set NOMAD_TOKEN or create ${TOKEN_FILE} and retry." >&2
     exit 1
   fi

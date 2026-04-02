@@ -9,18 +9,8 @@ NOMAD_CA_CERT_FILE="${ARTIFACTS_DIR}/nomad-agent-ca.pem"
 NOMAD_CLIENT_CERT_FILE="${ARTIFACTS_DIR}/global-cli-nomad.pem"
 NOMAD_CLIENT_KEY_FILE="${ARTIFACTS_DIR}/global-cli-nomad-key.pem"
 
-require_command() {
-  local command_name="$1"
-  local guidance="$2"
-
-  if ! command -v "${command_name}" >/dev/null 2>&1; then
-    echo "${command_name} is required for E2E test job submission." >&2
-    if [[ -n "${guidance}" ]]; then
-      echo "${guidance}" >&2
-    fi
-    exit 1
-  fi
-}
+# shellcheck source=./common.sh
+source "${SCRIPT_DIR}/common.sh"
 
 resolve_nomad_addr() {
   local nomad_addr_input
@@ -28,14 +18,14 @@ resolve_nomad_addr() {
 
   if [[ -z "${nomad_addr_input}" ]]; then
     local deploy_nomad_server
-    deploy_nomad_server="$(terraform -chdir="${E2E_DIR}" output -raw deploy_nomad_server 2>/dev/null || echo "false")"
+    deploy_nomad_server="$(tf_output_with_default "deploy_nomad_server" "false")"
 
     if [[ "${deploy_nomad_server}" == "true" ]]; then
       local nomad_server_public_ip
-      nomad_server_public_ip="$(terraform -chdir="${E2E_DIR}" output -raw nomad_server_public_ip 2>/dev/null || true)"
+      nomad_server_public_ip="$(tf_output_optional "nomad_server_public_ip")"
       if [[ -n "${nomad_server_public_ip}" && "${nomad_server_public_ip}" != "null" ]]; then
         local nomad_tls_enabled
-        nomad_tls_enabled="$(terraform -chdir="${E2E_DIR}" output -raw nomad_tls_enabled 2>/dev/null || echo "false")"
+        nomad_tls_enabled="$(tf_output_with_default "nomad_tls_enabled" "false")"
         if [[ "${nomad_tls_enabled}" == "true" ]]; then
           nomad_addr_input="https://${nomad_server_public_ip}:4646"
         else
@@ -45,7 +35,7 @@ resolve_nomad_addr() {
     fi
 
     if [[ -z "${nomad_addr_input}" ]]; then
-      nomad_addr_input="$(terraform -chdir="${E2E_DIR}" output -raw nomad_addr 2>/dev/null || true)"
+      nomad_addr_input="$(tf_output_optional "nomad_addr")"
     fi
   fi
 
@@ -64,7 +54,7 @@ resolve_nomad_addr() {
 build_curl_args() {
   local nomad_token="$1"
   local nomad_tls_enabled
-  nomad_tls_enabled="$(terraform -chdir="${E2E_DIR}" output -raw nomad_tls_enabled 2>/dev/null || echo "false")"
+  nomad_tls_enabled="$(tf_output_with_default "nomad_tls_enabled" "false")"
 
   CURL_ARGS=(--fail --silent --show-error)
   if [[ -n "${nomad_token}" ]]; then
@@ -72,14 +62,13 @@ build_curl_args() {
   fi
   if [[ "${nomad_tls_enabled}" == "true" ]]; then
     if [[ ! -f "${NOMAD_CA_CERT_FILE}" ]]; then
-      terraform -chdir="${E2E_DIR}" output -raw nomad_tls_ca_pem > "${NOMAD_CA_CERT_FILE}"
+      secure_write_file "${NOMAD_CA_CERT_FILE}" "$(tf_output_optional "nomad_tls_ca_pem")" 644
     fi
     if [[ ! -f "${NOMAD_CLIENT_CERT_FILE}" ]]; then
-      terraform -chdir="${E2E_DIR}" output -raw nomad_tls_client_cert_pem > "${NOMAD_CLIENT_CERT_FILE}"
+      secure_write_file "${NOMAD_CLIENT_CERT_FILE}" "$(tf_output_optional "nomad_tls_client_cert_pem")" 644
     fi
     if [[ ! -f "${NOMAD_CLIENT_KEY_FILE}" ]]; then
-      terraform -chdir="${E2E_DIR}" output -raw nomad_tls_client_key_pem > "${NOMAD_CLIENT_KEY_FILE}"
-      chmod 600 "${NOMAD_CLIENT_KEY_FILE}"
+      secure_write_file "${NOMAD_CLIENT_KEY_FILE}" "$(tf_output_optional "nomad_tls_client_key_pem")" 600
     fi
     CURL_ARGS+=(--cacert "${NOMAD_CA_CERT_FILE}" --cert "${NOMAD_CLIENT_CERT_FILE}" --key "${NOMAD_CLIENT_KEY_FILE}")
   fi
@@ -90,16 +79,37 @@ api_get_json() {
   curl "${CURL_ARGS[@]}" "${NOMAD_ADDR}${path}"
 }
 
-count_runnable_nodes() {
-  local target_os="$1"
-  local driver_name="$2"
+fetch_node_details_json() {
+  local nodes_json
 
+  # Fast path: some Nomad deployments expose detailed node payloads on /v1/nodes?resources=true.
+  if nodes_json="$(api_get_json "/v1/nodes?resources=true" 2>/dev/null || true)"; then
+    if [[ -n "${nodes_json}" ]] && jq -e '
+      type == "array"
+      and (
+        length == 0
+        or (.[0] | has("Drivers") and has("Attributes"))
+      )
+    ' >/dev/null 2>&1 <<<"${nodes_json}"; then
+      printf '%s\n' "${nodes_json}"
+      return 0
+    fi
+  fi
+
+  # Fallback: fetch IDs, then resolve full node details one-by-one.
   api_get_json "/v1/nodes" \
     | jq -r '.[].ID' \
     | while read -r node_id; do
       api_get_json "/v1/node/${node_id}"
     done \
-    | jq -s --arg target_os "${target_os}" --arg driver_name "${driver_name}" '
+    | jq -s '.'
+}
+
+count_runnable_nodes_from_json() {
+  local target_os="$1"
+  local driver_name="$2"
+
+  jq --arg target_os "${target_os}" --arg driver_name "${driver_name}" '
       [
         .[]
         | select(
@@ -168,11 +178,16 @@ require_command "terraform" "Install Terraform and ensure it is on PATH."
 require_command "curl" "Install curl and ensure it is on PATH."
 require_command "jq" "Install jq and ensure it is on PATH."
 
-mkdir -p "${ARTIFACTS_DIR}"
+ensure_artifacts_dir "${ARTIFACTS_DIR}"
+
+if ! ensure_tf_outputs_json; then
+  log_error "Failed to retrieve Terraform outputs from ${E2E_DIR}. Ensure terraform apply completed successfully."
+  exit 1
+fi
 
 NOMAD_ADDR="$(resolve_nomad_addr "${1:-}")"
 NOMAD_TOKEN="${2:-${NOMAD_TOKEN:-}}"
-NOMAD_DATACENTER="$(terraform -chdir="${E2E_DIR}" output -raw nomad_datacenter 2>/dev/null || echo "dc1")"
+NOMAD_DATACENTER="$(tf_output_with_default "nomad_datacenter" "dc1")"
 
 if [[ -z "${NOMAD_TOKEN}" ]] && [[ -f "${TOKEN_FILE}" ]]; then
   NOMAD_TOKEN="$(cat "${TOKEN_FILE}")"
@@ -180,8 +195,10 @@ fi
 
 build_curl_args "${NOMAD_TOKEN}"
 
-linux_eligible_nodes="$(count_runnable_nodes "linux" "exec")"
-windows_eligible_nodes="$(count_runnable_nodes "windows" "raw_exec")"
+node_details_json="$(fetch_node_details_json)"
+
+linux_eligible_nodes="$(count_runnable_nodes_from_json "linux" "exec" <<<"${node_details_json}")"
+windows_eligible_nodes="$(count_runnable_nodes_from_json "windows" "raw_exec" <<<"${node_details_json}")"
 
 echo "Eligible Nomad clients -> linux-like(exec): ${linux_eligible_nodes}, windows(raw_exec): ${windows_eligible_nodes}"
 
