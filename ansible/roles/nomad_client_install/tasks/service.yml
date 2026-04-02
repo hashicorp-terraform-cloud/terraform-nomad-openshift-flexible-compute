@@ -26,6 +26,19 @@
     - ansible_facts["system"] == "Linux"
     - nomad_client_install_reset_state | bool
 
+- name: Rewrite Nomad client introduction token file after state reset (Linux)
+  ansible.builtin.copy:
+    content: "{{ nomad_client_install_intro_token }}"
+    dest: "{{ nomad_client_install_state_dir }}/intro_token.jwt"
+    owner: "nomad"
+    group: "nomad"
+    mode: "0600"
+  when:
+    - ansible_facts["system"] == "Linux"
+    - nomad_client_install_reset_state | bool
+    - nomad_client_install_intro_token | length > 0
+  no_log: true
+
 - name: Stop Nomad service before state reset (Windows)
   ansible.windows.win_service:
     name: "{{ nomad_client_install_service_name }}"
@@ -49,6 +62,16 @@
   when:
     - ansible_facts["os_family"] == "Windows"
     - nomad_client_install_reset_state | bool
+
+- name: Rewrite Nomad client introduction token file after state reset (Windows)
+  ansible.windows.win_copy:
+    content: "{{ nomad_client_install_intro_token }}"
+    dest: "{{ nomad_client_install_state_dir }}\\intro_token.jwt"
+  when:
+    - ansible_facts["os_family"] == "Windows"
+    - nomad_client_install_reset_state | bool
+    - nomad_client_install_intro_token | length > 0
+  no_log: true
 
 - name: Enable and start Nomad service (Linux)
   ansible.builtin.service:

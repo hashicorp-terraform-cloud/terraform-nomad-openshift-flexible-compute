@@ -32,7 +32,12 @@
         nomad_license_path: >-
           {{ 'C:\\ProgramData\\Nomad\\config\\license.hclic' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/license.hclic' }}
         nomad_intro_token_path: >-
-          {{ 'C:\\ProgramData\\Nomad\\data\\client\\intro_token.jwt' if ansible_facts['os_family'] == 'Windows' else '/opt/nomad/client/intro_token.jwt' }}
+          {{
+            ((nomad_state_dir | default('C:\\ProgramData\\Nomad\\data\\client')) ~ '\\intro_token.jwt')
+            if ansible_facts['os_family'] == 'Windows'
+            else
+            ((nomad_state_dir | default('/opt/nomad/client')) ~ '/intro_token.jwt')
+          }}
         nomad_tls_ca_path: >-
           {{ 'C:\\ProgramData\\Nomad\\config\\tls\\nomad-agent-ca.pem' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d/tls/nomad-agent-ca.pem' }}
         nomad_tls_client_cert_path: >-
