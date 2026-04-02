@@ -127,7 +127,7 @@ Key variables (set via AAP extra vars or role defaults):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `nomad_client_remove_drain_before_uninstall` | `true` | Require a successful drain before uninstalling Nomad |
-| `nomad_client_remove_drain_force` | `false` | Use forced drain (`-force`) |
+| `nomad_client_remove_drain_force` | `true` | Use forced drain (`-force`) |
 | `nomad_client_remove_drain_deadline` | `30m` | Drain deadline passed to `nomad node drain -deadline` |
 | `nomad_edition` | `community` | Client edition (`community` or `enterprise`) used to derive package removal behavior |
 | `nomad_client_remove_allocations_wait_retries` | `12` | Number of post-drain allocation polling attempts before failing |
@@ -135,7 +135,7 @@ Key variables (set via AAP extra vars or role defaults):
 | `nomad_client_remove_nomad_addr` | `""` | Optional explicit Nomad API address (`NOMAD_ADDR`) |
 | `nomad_client_remove_nomad_token` | `""` | Optional ACL token used for drain operations (`NOMAD_TOKEN`) |
 | `nomad_client_remove_delete_state` | `true` | Delete Nomad client state/data directories during remove (deletes node identity state) |
-| `nomad_client_remove_purge_node` | `false` | Purge node from Nomad server list during remove; recommended when deleting state |
+| `nomad_client_remove_purge_node` | `true` | Purge node from Nomad server list during remove; recommended when deleting state |
 
 ## Outputs
 
