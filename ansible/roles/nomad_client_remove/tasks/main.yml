@@ -104,6 +104,19 @@
     - nomad_client_remove_drain_before_uninstall | bool
     - ansible_facts["system"] in ["Linux", "Darwin"]
 
+- name: Assert node eligibility disable succeeded (POSIX)
+  ansible.builtin.assert:
+    that:
+      - nomad_client_remove_disable_eligibility_posix.rc == 0
+    fail_msg: >-
+      Failed to disable Nomad node eligibility before uninstall.
+      rc={{ nomad_client_remove_disable_eligibility_posix.rc | default('n/a') }}
+      stdout={{ nomad_client_remove_disable_eligibility_posix.stdout | default('') }}
+      stderr={{ nomad_client_remove_disable_eligibility_posix.stderr | default('') }}
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_facts["system"] in ["Linux", "Darwin"]
+
 - name: Drain node before uninstall (POSIX)
   ansible.builtin.command: >-
     nomad node drain -enable -yes -deadline={{ nomad_client_remove_drain_deadline }}
@@ -117,6 +130,19 @@
     - nomad_client_remove_drain_before_uninstall | bool
     - ansible_facts["system"] in ["Linux", "Darwin"]
 
+- name: Assert node drain succeeded (POSIX)
+  ansible.builtin.assert:
+    that:
+      - nomad_client_remove_drain_posix.rc == 0
+    fail_msg: >-
+      Failed to drain Nomad node before uninstall.
+      rc={{ nomad_client_remove_drain_posix.rc | default('n/a') }}
+      stdout={{ nomad_client_remove_drain_posix.stdout | default('') }}
+      stderr={{ nomad_client_remove_drain_posix.stderr | default('') }}
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_facts["system"] in ["Linux", "Darwin"]
+
 - name: Disable node eligibility before uninstall (Windows)
   ansible.windows.win_shell: |
     $env:NOMAD_ADDR = "{{ nomad_client_remove_nomad_env.NOMAD_ADDR | default('') }}"
@@ -125,6 +151,19 @@
   register: nomad_client_remove_disable_eligibility_windows
   changed_when: nomad_client_remove_disable_eligibility_windows.rc == 0
   failed_when: false
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_facts["os_family"] == "Windows"
+
+- name: Assert node eligibility disable succeeded (Windows)
+  ansible.builtin.assert:
+    that:
+      - nomad_client_remove_disable_eligibility_windows.rc == 0
+    fail_msg: >-
+      Failed to disable Nomad node eligibility before uninstall on Windows.
+      rc={{ nomad_client_remove_disable_eligibility_windows.rc | default('n/a') }}
+      stdout={{ nomad_client_remove_disable_eligibility_windows.stdout | default('') }}
+      stderr={{ nomad_client_remove_disable_eligibility_windows.stderr | default('') }}
   when:
     - nomad_client_remove_drain_before_uninstall | bool
     - ansible_facts["os_family"] == "Windows"
@@ -145,6 +184,19 @@
   register: nomad_client_remove_drain_windows
   changed_when: nomad_client_remove_drain_windows.rc == 0
   failed_when: false
+  when:
+    - nomad_client_remove_drain_before_uninstall | bool
+    - ansible_facts["os_family"] == "Windows"
+
+- name: Assert node drain succeeded (Windows)
+  ansible.builtin.assert:
+    that:
+      - nomad_client_remove_drain_windows.rc == 0
+    fail_msg: >-
+      Failed to drain Nomad node before uninstall on Windows.
+      rc={{ nomad_client_remove_drain_windows.rc | default('n/a') }}
+      stdout={{ nomad_client_remove_drain_windows.stdout | default('') }}
+      stderr={{ nomad_client_remove_drain_windows.stderr | default('') }}
   when:
     - nomad_client_remove_drain_before_uninstall | bool
     - ansible_facts["os_family"] == "Windows"
