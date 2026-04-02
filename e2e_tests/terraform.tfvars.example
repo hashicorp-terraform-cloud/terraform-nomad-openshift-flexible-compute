@@ -6,7 +6,9 @@ nomad_acl_enabled   = true
 # Use a reachable external host/IP (without :4647).
 nomad_server_address = ""
 
-# Optional: set when your cluster enforces client introduction tokens.
+# Optional manual override: set when your cluster enforces client introduction tokens.
+# If left empty in self-hosted ACL-enabled E2E mode, the harness auto-generates one
+# and injects it into generated extra vars.
 client_introduction_token = ""
 
 # Optional: Nomad install profile for E2E clients.

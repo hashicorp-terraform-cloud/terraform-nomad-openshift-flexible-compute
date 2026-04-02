@@ -7,6 +7,7 @@ ARTIFACTS_DIR="${E2E_DIR}/.artifacts"
 INVENTORY_FILE="${ARTIFACTS_DIR}/inventory.ini"
 EXTRA_VARS_FILE="${ARTIFACTS_DIR}/extra_vars.yml"
 TOKEN_FILE="${ARTIFACTS_DIR}/nomad_management_token.txt"
+INTRO_TOKEN_FILE="${ARTIFACTS_DIR}/nomad_client_intro_token.txt"
 NOMAD_CA_CERT_FILE="${ARTIFACTS_DIR}/nomad-agent-ca.pem"
 NOMAD_CLIENT_CERT_FILE="${ARTIFACTS_DIR}/global-cli-nomad.pem"
 NOMAD_CLIENT_KEY_FILE="${ARTIFACTS_DIR}/global-cli-nomad-key.pem"
@@ -287,7 +288,15 @@ nomad_license_tf="$(terraform_output_optional "nomad_license")"
 inventory_ini_tf="$(terraform_output_optional "inventory_ini")"
 extra_vars_yaml_tf="$(terraform_output_optional "extra_vars_yaml")"
 client_intro_token="$(terraform_output_optional "client_introduction_token")"
+deploy_nomad_server_tf="$(terraform_output_with_default "deploy_nomad_server" "false")"
+nomad_acl_enabled_tf="$(terraform_output_with_default "nomad_acl_enabled" "false")"
 ssh_private_key_path="${E2E_SSH_PRIVATE_KEY_FILE:-${E2E_DIR}/.artifacts/e2e_rsa.pem}"
+
+if [[ -z "${client_intro_token}" || "${client_intro_token}" == "null" ]]; then
+  if [[ "${deploy_nomad_server_tf}" == "true" && "${nomad_acl_enabled_tf}" == "true" && -s "${INTRO_TOKEN_FILE}" ]]; then
+    client_intro_token="$(cat "${INTRO_TOKEN_FILE}")"
+  fi
+fi
 
 write_generated_private_key_if_needed "${ssh_private_key_path}"
 require_file "${ssh_private_key_path}" "E2E_SSH_PRIVATE_KEY_FILE"
@@ -371,6 +380,21 @@ if [[ -f "${TOKEN_FILE}" ]]; then
       echo "\"nomad_token\": \"${nomad_token_escaped}\"" >> "${EXTRA_VARS_FILE}"
     fi
   fi
+fi
+
+client_intro_token_escaped="${client_intro_token//\\/\\\\}"
+client_intro_token_escaped="${client_intro_token_escaped//\"/\\\"}"
+
+if grep -Eq '^[[:space:]]*"?nomad_client_intro_token"?:' "${EXTRA_VARS_FILE}"; then
+  sed -i.bak -E "s|^[[:space:]]*\"?nomad_client_intro_token\"?: .*|\"nomad_client_intro_token\": \"${client_intro_token_escaped}\"|" "${EXTRA_VARS_FILE}" && rm -f "${EXTRA_VARS_FILE}.bak"
+else
+  echo "\"nomad_client_intro_token\": \"${client_intro_token_escaped}\"" >> "${EXTRA_VARS_FILE}"
+fi
+
+if grep -Eq '^[[:space:]]*"?nomad_client_install_intro_token"?:' "${EXTRA_VARS_FILE}"; then
+  sed -i.bak -E "s|^[[:space:]]*\"?nomad_client_install_intro_token\"?: .*|\"nomad_client_install_intro_token\": \"${client_intro_token_escaped}\"|" "${EXTRA_VARS_FILE}" && rm -f "${EXTRA_VARS_FILE}.bak"
+else
+  echo "\"nomad_client_install_intro_token\": \"${client_intro_token_escaped}\"" >> "${EXTRA_VARS_FILE}"
 fi
 
 echo "Generated inventory: ${INVENTORY_FILE}"

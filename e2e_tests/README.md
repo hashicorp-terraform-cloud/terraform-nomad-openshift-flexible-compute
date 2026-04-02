@@ -31,6 +31,7 @@ In self-contained mode (`deploy_nomad_server = true`), Nomad ACLs are enabled by
 - Local tools:
   - `jq`
   - `curl`
+  - `nomad` (required only when auto-generating client introduction tokens in ACL-enabled self-hosted mode)
 
 When you use the repository `make` targets for Ansible or E2E workflows, the Makefile now creates or refreshes a repo-local virtual environment at `.venv/` and installs the Python dependencies from `e2e_tests/requirements.txt` before running the playbooks.
 
@@ -42,6 +43,7 @@ The E2E harness generates a disposable PEM-encoded RSA key pair automatically. L
 - `nomad-agent-ca.pem` (Nomad TLS CA certificate for local API calls)
 - `global-cli-nomad.pem` (Nomad TLS client certificate for local API calls)
 - `global-cli-nomad-key.pem` (Nomad TLS client key for local API calls)
+- `nomad_client_intro_token.txt` (auto-generated Nomad client introduction token in ACL-enabled self-hosted mode)
 
 Terraform also decrypts the Windows administrator password natively via `rsadecrypt()` and exposes rendered inventory/vars content for local generation.
 
@@ -80,6 +82,8 @@ TLS inputs:
 Optional:
 
 - `client_introduction_token`: for ACL-protected clusters using client introduction token flow.
+   - If empty and running self-hosted E2E (`deploy_nomad_server = true`) with ACL enabled, the harness auto-generates a token and stores it in `.artifacts/nomad_client_intro_token.txt`.
+   - If set, the provided value is authoritative and auto-generated token artifacts are ignored.
 - `allowed_cidr_blocks`: restrict access to ports `22`, `5986`, and `4646` (Nomad API readiness checks).
 
 When you use `make e2e-*`, you do **not** need to manage SSH key material manually. If you run Terraform directly instead of using the Makefile, the harness still generates a disposable key pair automatically.
@@ -143,9 +147,13 @@ From repository root:
 
    When ACL is enabled for a self-hosted E2E server, `make e2e-install` bootstraps ACLs automatically and writes a local management token file at `e2e_tests/.artifacts/nomad_management_token.txt`. The token is then injected into generated `extra_vars.yml` as `nomad_token` for authenticated Nomad API checks and remove workflow drain/purge operations.
 
+   In the same ACL-enabled self-hosted flow, when `client_introduction_token` is empty, the harness auto-generates a Nomad client introduction token and writes it to `e2e_tests/.artifacts/nomad_client_intro_token.txt`. `generate_inventory.sh` injects it into `extra_vars.yml` as both `nomad_client_intro_token` and `nomad_client_install_intro_token`.
+
    If you use `make e2e`, `make e2e-install`, `make e2e-assert-install`, `make e2e-run-remove`, `make e2e-assert-remove`, `make ansible-check`, or `make ansible-lint`, the Makefile will create `.venv/` with the required Ansible and WinRM Python packages automatically.
 
-   The generated Linux inventory sets SSH arguments to disable strict host key checking for ephemeral E2E hosts, which avoids failures due to recycled public IP host key mismatches.
+   The generated Linux and Red Hat inventory entries set SSH arguments to disable strict host key checking for ephemeral E2E hosts, which avoids failures due to recycled public IP host key mismatches.
+
+   The generated SSH arguments also enforce `IdentitiesOnly=yes` with `PreferredAuthentications=publickey` so OpenSSH uses the generated E2E key first instead of trying unrelated keys from your local SSH agent. This avoids `Too many authentication failures` errors on hosts with low `MaxAuthTries` limits.
 
    In self-contained mode (`deploy_nomad_server = true`), readiness checks wait for the Nomad server API to report a leader and the default TLS-enabled client workflow uses a deterministic private IP for the Nomad server in generated extra vars. Tune wait behavior with:
    - `E2E_NOMAD_WAIT_MAX_ATTEMPTS` (default `30`)
@@ -200,6 +208,8 @@ bash e2e_tests/scripts/bootstrap_acl.sh https://your-nomad.example.com:4646
 ```
 
 If you omit the address in self-contained mode, the script defaults to the E2E Nomad server **public** API endpoint so it remains reachable from your local machine. The script writes the bootstrap management token to `.artifacts/nomad_management_token.txt`.
+
+When `client_introduction_token` is not set in Terraform outputs, the same script also ensures a client introduction token exists at `.artifacts/nomad_client_intro_token.txt` (requires local `nomad` CLI).
 
 For default self-contained E2E make targets, this bootstrap step is automatic.
 

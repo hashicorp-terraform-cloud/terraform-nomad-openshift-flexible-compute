@@ -26,8 +26,8 @@ locals {
   nomad_tls_cli_key_pem_e2e     = var.deploy_nomad_server ? tls_private_key.nomad_cli[0].private_key_pem : trimspace(var.nomad_tls_client_key_pem)
   nomad_api_scheme              = var.nomad_tls_enabled ? "https" : "http"
   linux_inventory_entries = join("\n", compact([
-    "linux-e2e ansible_host=${aws_instance.linux.public_ip} ansible_user=${var.linux_ssh_user} ansible_connection=ssh ansible_python_interpreter=/usr/bin/python3 ansible_ssh_private_key_file=${local.e2e_private_key_file} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'",
-    var.deploy_redhat_client ? "redhat-e2e ansible_host=${aws_instance.redhat[0].public_ip} ansible_user=${var.redhat_ssh_user} ansible_connection=ssh ansible_python_interpreter=/usr/bin/python3 ansible_ssh_private_key_file=${local.e2e_private_key_file} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" : ""
+    "linux-e2e ansible_host=${aws_instance.linux.public_ip} ansible_user=${var.linux_ssh_user} ansible_connection=ssh ansible_python_interpreter=/usr/bin/python3 ansible_ssh_private_key_file=${local.e2e_private_key_file} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o PreferredAuthentications=publickey'",
+    var.deploy_redhat_client ? "redhat-e2e ansible_host=${aws_instance.redhat[0].public_ip} ansible_user=${var.redhat_ssh_user} ansible_connection=ssh ansible_python_interpreter=/usr/bin/python3 ansible_ssh_private_key_file=${local.e2e_private_key_file} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o PreferredAuthentications=publickey'" : ""
   ]))
   inventory_content = <<-EOT
     [linux]
