@@ -33,6 +33,15 @@ allowed_cidr_blocks = ["0.0.0.0/0"]
 # redhat_instance_type = "t3a.small"
 # redhat_ssh_user      = "ec2-user"
 
+# Optional (disabled by default): include this local macOS machine as an E2E client target.
+# WARNING: when enabled, install/remove playbooks modify local Nomad files and launchd state.
+# deploy_local_macos_client = true
+# local_macos_connection    = "local" # "local" or "ssh"
+# local_macos_host_alias    = "macos-local"
+# If using ssh mode:
+# local_macos_ssh_host      = "macbook.local"
+# local_macos_ssh_user      = "your-user"
+
 # Optional tag overrides.
 tags = {
   Environment = "e2e"

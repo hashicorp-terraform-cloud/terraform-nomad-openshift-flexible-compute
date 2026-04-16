@@ -76,6 +76,26 @@ port_open() {
   return 1
 }
 
+wait_for_port_open() {
+  local host="$1"
+  local port="$2"
+  local max_attempts="${3:-10}"
+  local sleep_seconds="${4:-1}"
+  local timeout_seconds="${5:-5}"
+  local attempt=1
+
+  while [[ ${attempt} -le ${max_attempts} ]]; do
+    if port_open "${host}" "${port}" "${timeout_seconds}"; then
+      return 0
+    fi
+
+    sleep "${sleep_seconds}"
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
 ensure_tf_outputs_json() {
   if [[ -n "${TF_OUTPUTS_JSON:-}" ]]; then
     return 0

@@ -157,18 +157,21 @@ This repository includes an Ansible-focused end-to-end harness under `e2e_tests/
 
 - Provisions Linux and Windows EC2 hosts.
 - Provisions Amazon Linux and Windows EC2 hosts, with optional additional Red Hat Enterprise Linux coverage.
+- Optionally includes a local macOS host as an additional Nomad client E2E target when enabled in `e2e_tests/terraform.auto.tfvars` or `e2e_tests/terraform.tfvars`.
 - Generates dynamic inventory and extra vars.
 - Runs `ansible/install_nomad_client.yml` and `ansible/remove_nomad_client.yml` directly with OSS Ansible.
 - Verifies install and remove behavior with assertion playbooks.
 - Waits for self-hosted Nomad server API, SSH, and WinRM readiness before running install/assert/remove workflows.
 
+By default, local macOS targeting is disabled. Enable it with `deploy_local_macos_client = true` in `e2e_tests/terraform.auto.tfvars` or `e2e_tests/terraform.tfvars` when you want real Darwin execution coverage. Because install/remove playbooks are destructive for the target host, local macOS mode requires explicit operator opt-in at runtime.
+
 The E2E harness enables Nomad TLS by default and uses HTTPS with client certificates for local Nomad API operations in self-contained runs.
 
-By default, the harness now provisions a single-node Nomad server in AWS for self-contained E2E runs. To target an existing cluster instead, set `deploy_nomad_server = false` and provide `nomad_server_address` in `e2e_tests/terraform.tfvars`.
+By default, the harness now provisions a single-node Nomad server in AWS for self-contained E2E runs. To target an existing cluster instead, set `deploy_nomad_server = false` and provide `nomad_server_address` in `e2e_tests/terraform.auto.tfvars` or `e2e_tests/terraform.tfvars`.
 
 The default E2E host sizes use `t3a.small` for Amazon Linux/server nodes and `t3a.large` for the Windows node. This preserves the same x86 instance sizing profile as the previous T3 defaults while using AWS's lower-cost comparable T3a family.
 
-The E2E harness automatically selects a default subnet whose Availability Zone supports all requested EC2 instance types, avoiding unsupported-AZ failures from lexicographically first default subnets. In self-contained mode it passes a deterministic private IP for the Nomad server to client configuration in the default TLS-enabled flow, while local ACL bootstrap convenience still defaults to the server's public API endpoint.
+The E2E harness automatically selects a default subnet whose Availability Zone supports all requested EC2 instance types, avoiding unsupported-AZ failures from lexicographically first default subnets. In self-contained mode it passes a deterministic private IP for the Nomad server to client configuration in the default TLS-enabled flow, while local ACL bootstrap convenience still defaults to the server's public API endpoint. Local macOS client mode with `local` connection requires private network reachability to that RPC endpoint (`:4647`); when your workstation cannot reach the VPC directly, use the local tunnel helpers under `e2e_tests/scripts/` (or the corresponding `make e2e-setup-local-macos-tunnel` / `make e2e-cleanup-local-macos-tunnel` targets) to preserve the private RPC target while transporting it over SSH.
 
 For remote-safe E2E runs, local artifacts in `e2e_tests/.artifacts/` are generated on your machine by `e2e_tests/scripts/generate_inventory.sh` from Terraform outputs, including `e2e_rsa.pem`, `inventory.ini`, and `extra_vars.yml`.
 

@@ -29,16 +29,28 @@ locals {
     "linux-e2e ansible_host=${aws_instance.linux.public_ip} ansible_user=${var.linux_ssh_user} ansible_connection=ssh ansible_python_interpreter=/usr/bin/python3 ansible_ssh_private_key_file=${local.e2e_private_key_file} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o PreferredAuthentications=publickey'",
     var.deploy_redhat_client ? "redhat-e2e ansible_host=${aws_instance.redhat[0].public_ip} ansible_user=${var.redhat_ssh_user} ansible_connection=ssh ansible_python_interpreter=/usr/bin/python3 ansible_ssh_private_key_file=${local.e2e_private_key_file} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o PreferredAuthentications=publickey'" : ""
   ]))
+  local_macos_connection_normalized = lower(trimspace(var.local_macos_connection))
+  local_macos_inventory_entry = (
+    !var.deploy_local_macos_client
+    ? ""
+    : (
+      local.local_macos_connection_normalized == "ssh"
+      ? "${var.local_macos_host_alias} ansible_host=${var.local_macos_ssh_host} ansible_user=${var.local_macos_ssh_user} ansible_connection=ssh ansible_python_interpreter=/usr/bin/python3"
+      : "${var.local_macos_host_alias} ansible_connection=local ansible_python_interpreter=/usr/bin/python3"
+    )
+  )
   inventory_content = <<-EOT
     [linux]
     ${local.linux_inventory_entries}
 
     [windows]
     windows-e2e ansible_host=${aws_instance.windows.public_ip} ansible_user=${var.windows_admin_username} ansible_password=${local.windows_admin_password} ansible_connection=winrm ansible_port=5986 ansible_winrm_scheme=https ansible_winrm_transport=basic ansible_winrm_server_cert_validation=ignore ansible_winrm_operation_timeout_sec=60 ansible_winrm_read_timeout_sec=90
+${var.deploy_local_macos_client ? "\n    [macos]\n    ${local.local_macos_inventory_entry}\n" : ""}
 
     [nomad_clients:children]
     linux
     windows
+${var.deploy_local_macos_client ? "    macos" : ""}
   EOT
   base_extra_vars = {
     nomad_server_address                 = local.effective_nomad_server_address
@@ -383,6 +395,7 @@ resource "aws_instance" "nomad_server" {
   associate_public_ip_address = true
   key_name                    = aws_key_pair.e2e.key_name
   private_ip                  = local.nomad_server_private_ip
+  user_data_replace_on_change = true
 
   metadata_options {
     http_endpoint = "enabled"

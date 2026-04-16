@@ -86,6 +86,64 @@ variable "windows_admin_username" {
   default     = "Administrator"
 }
 
+variable "deploy_local_macos_client" {
+  type        = bool
+  description = "Include the local macOS machine as an optional Nomad client target in generated E2E inventory."
+  default     = false
+}
+
+variable "local_macos_host_alias" {
+  type        = string
+  description = "Inventory host alias used for the optional local macOS client."
+  default     = "macos-local"
+
+  validation {
+    condition     = !var.deploy_local_macos_client || length(trimspace(var.local_macos_host_alias)) > 0
+    error_message = "local_macos_host_alias must be non-empty when deploy_local_macos_client is true."
+  }
+}
+
+variable "local_macos_connection" {
+  type        = string
+  description = "Connection mode for the optional local macOS client (local or ssh)."
+  default     = "local"
+
+  validation {
+    condition     = contains(["local", "ssh"], lower(trimspace(var.local_macos_connection)))
+    error_message = "local_macos_connection must be either 'local' or 'ssh'."
+  }
+}
+
+variable "local_macos_ssh_host" {
+  type        = string
+  description = "SSH host/IP for optional macOS client when local_macos_connection is ssh."
+  default     = ""
+
+  validation {
+    condition = (
+      !var.deploy_local_macos_client
+      || lower(trimspace(var.local_macos_connection)) != "ssh"
+      || length(trimspace(var.local_macos_ssh_host)) > 0
+    )
+    error_message = "local_macos_ssh_host must be set when deploy_local_macos_client is true and local_macos_connection is 'ssh'."
+  }
+}
+
+variable "local_macos_ssh_user" {
+  type        = string
+  description = "SSH user for optional macOS client when local_macos_connection is ssh."
+  default     = ""
+
+  validation {
+    condition = (
+      !var.deploy_local_macos_client
+      || lower(trimspace(var.local_macos_connection)) != "ssh"
+      || length(trimspace(var.local_macos_ssh_user)) > 0
+    )
+    error_message = "local_macos_ssh_user must be set when deploy_local_macos_client is true and local_macos_connection is 'ssh'."
+  }
+}
+
 variable "deploy_nomad_server" {
   type        = bool
   description = "Deploy a single-node Nomad server for E2E client lifecycle tests."

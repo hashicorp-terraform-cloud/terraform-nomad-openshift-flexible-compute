@@ -19,6 +19,8 @@ applyTo: "**/*.tf"
 - For E2E shell helpers that consume Terraform outputs (for example under `e2e_tests/scripts/`), prefer a single `terraform output -json` read plus helper accessors over repeated `terraform output -raw` calls. This avoids repeated CLI invocations and keeps all derived values based on a single output snapshot.
 - In remote-run contexts (for example HCP Terraform), do not rely on `local_file` or `local_sensitive_file` for artifacts needed on the developer machine (such as E2E inventory files). Expose required content through outputs and generate local artifacts with local scripts/Make targets.
 - Preserve the E2E client introduction token contract: manual `client_introduction_token` input remains authoritative, while self-hosted ACL-enabled E2E flows may auto-generate a fallback token artifact consumed by local scripts.
+- Preserve the current self-hosted E2E macOS routing contract: Terraform continues to publish the server private RPC address for client configuration, while the local macOS tunnel helpers use Terraform outputs to make that private address reachable without changing the server advertise model.
+- When updating `e2e_tests/scripts/` helpers related to local macOS support, keep `setup_local_macos_nomad_tunnel.sh`, `cleanup_local_macos_nomad_tunnel.sh`, and `preflight.sh` aligned with `e2e_tests/README.md` so the documented tunnel lifecycle matches the implemented behavior.
 - Validate and check your work using this sequence:
   - For root Terraform changes: run `make terraform-check` and, when relevant, `make tflint`.
   - For `e2e_tests/*.tf` changes: run `make e2e-terraform-check` (or `make e2e-check` for combined Terraform+Ansible E2E checks).

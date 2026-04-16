@@ -20,6 +20,8 @@ applyTo: "{ansible/**,e2e_tests/ansible/**}"
 - Prefer role defaults and OS conditionals over host-specific hard-coded values.
 - Use `ansible_facts[...]` (or `ansible_facts.get(...)`) for fact access in conditions and templates; avoid deprecated top-level fact vars such as `ansible_os_family`, `ansible_system`, `ansible_distribution_release`, and `ansible_architecture`.
 - Preserve cross-platform intro token file semantics in install assertions and role behavior (`intro_token.jwt` in the configured client state directory for POSIX and Windows path variants).
+- When `nomad_client_install_reset_state` is true, preserve state-reset parity across Linux, macOS, and Windows: stop the platform service, recreate the client state directory, and rewrite `intro_token.jwt` when an introduction token is present.
+- For local macOS E2E `local` mode, preserve the private RPC target in rendered Nomad client configuration. The tunnel helpers make that private address reachable; the role should not switch macOS to a public RPC address as a workaround.
 - Validate and check your work using this sequence:
   - For role/playbook edits under `ansible/**`: run `make ansible-check` then `make ansible-lint`.
   - For E2E assertion/playbook edits under `e2e_tests/ansible/**`: run `make e2e-ansible-check` (or `make e2e-check` for combined E2E validation).

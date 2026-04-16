@@ -21,8 +21,8 @@ fi
 
 if ! wait_for_nomad_server_ready "${ARTIFACTS_DIR}"; then
   log_error "Most common cause: security group ingress does not include your current source IP."
-  log_error "Check e2e_tests/terraform.tfvars -> allowed_cidr_blocks (must allow port 4646 from this machine)."
-  log_error "If you are using external server mode, set deploy_nomad_server=false in terraform.tfvars."
+  log_error "Check e2e_tests/terraform.auto.tfvars or e2e_tests/terraform.tfvars -> allowed_cidr_blocks (must allow port 4646 from this machine)."
+  log_error "If you are using external server mode, set deploy_nomad_server=false in terraform.auto.tfvars or terraform.tfvars."
   exit 1
 fi
 

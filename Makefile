@@ -1,6 +1,7 @@
-.PHONY: help check terraform-check terraform-fmt-check terraform-init terraform-validate tflint ansible-check ansible-lint e2e e2e-check e2e-terraform-check e2e-terraform-fmt-check e2e-terraform-init e2e-terraform-validate e2e-ansible-check e2e-remove e2e-init e2e-ensure-tfvars e2e-plan e2e-apply e2e-generate-inventory e2e-wait-ready e2e-bootstrap-acl e2e-install e2e-assert-install e2e-run-test-jobs e2e-run-remove e2e-assert-remove e2e-destroy e2e-venv
+.PHONY: help check terraform-check terraform-fmt-check terraform-init terraform-validate tflint ansible-check ansible-lint e2e e2e-check e2e-terraform-check e2e-terraform-fmt-check e2e-terraform-init e2e-terraform-validate e2e-ansible-check e2e-remove e2e-init e2e-ensure-tfvars e2e-plan e2e-apply e2e-generate-inventory e2e-wait-ready e2e-bootstrap-acl e2e-setup-local-macos-tunnel e2e-cleanup-local-macos-tunnel e2e-install e2e-assert-install e2e-run-test-jobs e2e-run-remove e2e-assert-remove e2e-destroy e2e-venv
 
-E2E_TFVARS_FILE ?= e2e_tests/terraform.tfvars
+E2E_TFVARS_FILE ?= e2e_tests/terraform.auto.tfvars
+E2E_TFVARS_FILE_ALT ?= e2e_tests/terraform.tfvars
 E2E_TFVARS_EXAMPLE ?= e2e_tests/terraform.tfvars.example
 E2E_ARTIFACTS_DIR ?= e2e_tests/.artifacts
 E2E_VENV_DIR ?= .venv
@@ -26,6 +27,8 @@ help:
 		'  e2e-plan              Run Terraform plan for e2e_tests' \
 		'  e2e-apply             Apply e2e_tests infrastructure and generate inventory' \
 		'  e2e-bootstrap-acl     Bootstrap Nomad ACLs for the E2E Nomad server' \
+		'  e2e-setup-local-macos-tunnel  Create local macOS loopback alias + SSH tunnel for Nomad RPC' \
+		'  e2e-cleanup-local-macos-tunnel Remove local macOS loopback alias + SSH tunnel artifacts' \
 		'  e2e-install           Run the install playbook against E2E hosts' \
 		'  e2e-assert-install    Run E2E install assertions' \
 		'  e2e-run-test-jobs     Submit pre-remove Nomad test jobs' \
@@ -107,9 +110,10 @@ e2e-init:
 	terraform -chdir=e2e_tests init 
 
 e2e-ensure-tfvars:
-	@if [ ! -f "$(E2E_TFVARS_FILE)" ]; then \
+	@if [ ! -f "$(E2E_TFVARS_FILE)" ] && [ ! -f "$(E2E_TFVARS_FILE_ALT)" ]; then \
 		cp "$(E2E_TFVARS_EXAMPLE)" "$(E2E_TFVARS_FILE)"; \
 		echo "Created $(E2E_TFVARS_FILE) from $(E2E_TFVARS_EXAMPLE)."; \
+		echo "Either $(E2E_TFVARS_FILE) or $(E2E_TFVARS_FILE_ALT) is accepted for E2E local variables."; \
 		echo "Review $(E2E_TFVARS_FILE) and rerun make e2e."; \
 		exit 1; \
 	fi
@@ -145,24 +149,54 @@ e2e-bootstrap-acl-auto:
 		echo "Skipping ACL bootstrap (deploy_nomad_server=$$deploy_nomad_server, nomad_acl_enabled=$$nomad_acl_enabled)."; \
 	fi
 
-e2e-install: e2e-venv e2e-bootstrap-acl-auto e2e-generate-inventory
-	bash e2e_tests/scripts/preflight.sh
-	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook -i "$(E2E_INVENTORY_FILE)" ansible/install_nomad_client.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
+e2e-setup-local-macos-tunnel:
+	bash e2e_tests/scripts/setup_local_macos_nomad_tunnel.sh
 
-e2e-assert-install: e2e-venv e2e-bootstrap-acl-auto e2e-generate-inventory
+e2e-cleanup-local-macos-tunnel:
+	bash e2e_tests/scripts/cleanup_local_macos_nomad_tunnel.sh
+
+e2e-install: e2e-venv e2e-bootstrap-acl-auto e2e-generate-inventory e2e-setup-local-macos-tunnel
 	bash e2e_tests/scripts/preflight.sh
-	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook -i "$(E2E_INVENTORY_FILE)" e2e_tests/ansible/assert_install.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
+	@deploy_local_macos_client="$$(terraform -chdir=e2e_tests output -raw deploy_local_macos_client 2>/dev/null || echo false)"; \
+	local_macos_connection="$$(terraform -chdir=e2e_tests output -raw local_macos_connection 2>/dev/null || echo local)"; \
+	become_arg=""; \
+	if [ "$$deploy_local_macos_client" = "true" ] && [ "$$local_macos_connection" = "local" ]; then \
+		become_arg="--ask-become-pass"; \
+	fi; \
+	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook $$become_arg -i "$(E2E_INVENTORY_FILE)" ansible/install_nomad_client.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
+
+e2e-assert-install: e2e-venv e2e-bootstrap-acl-auto e2e-generate-inventory e2e-setup-local-macos-tunnel
+	bash e2e_tests/scripts/preflight.sh
+	@deploy_local_macos_client="$$(terraform -chdir=e2e_tests output -raw deploy_local_macos_client 2>/dev/null || echo false)"; \
+	local_macos_connection="$$(terraform -chdir=e2e_tests output -raw local_macos_connection 2>/dev/null || echo local)"; \
+	become_arg=""; \
+	if [ "$$deploy_local_macos_client" = "true" ] && [ "$$local_macos_connection" = "local" ]; then \
+		become_arg="--ask-become-pass"; \
+	fi; \
+	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook $$become_arg -i "$(E2E_INVENTORY_FILE)" e2e_tests/ansible/assert_install.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
 
 e2e-run-test-jobs: e2e-venv
 	$(E2E_VENV_PATH_PREFIX) bash e2e_tests/scripts/run_test_jobs.sh
 
-e2e-run-remove: e2e-venv e2e-bootstrap-acl-auto e2e-run-test-jobs e2e-generate-inventory
+e2e-run-remove: e2e-venv e2e-bootstrap-acl-auto e2e-run-test-jobs e2e-generate-inventory e2e-setup-local-macos-tunnel
 	bash e2e_tests/scripts/preflight.sh
-	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook -i "$(E2E_INVENTORY_FILE)" ansible/remove_nomad_client.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
+	@deploy_local_macos_client="$$(terraform -chdir=e2e_tests output -raw deploy_local_macos_client 2>/dev/null || echo false)"; \
+	local_macos_connection="$$(terraform -chdir=e2e_tests output -raw local_macos_connection 2>/dev/null || echo local)"; \
+	become_arg=""; \
+	if [ "$$deploy_local_macos_client" = "true" ] && [ "$$local_macos_connection" = "local" ]; then \
+		become_arg="--ask-become-pass"; \
+	fi; \
+	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook $$become_arg -i "$(E2E_INVENTORY_FILE)" ansible/remove_nomad_client.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
 
-e2e-assert-remove: e2e-venv e2e-bootstrap-acl-auto e2e-generate-inventory
+e2e-assert-remove: e2e-venv e2e-bootstrap-acl-auto e2e-generate-inventory e2e-setup-local-macos-tunnel
 	bash e2e_tests/scripts/preflight.sh
-	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook -i "$(E2E_INVENTORY_FILE)" e2e_tests/ansible/assert_remove.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
+	@deploy_local_macos_client="$$(terraform -chdir=e2e_tests output -raw deploy_local_macos_client 2>/dev/null || echo false)"; \
+	local_macos_connection="$$(terraform -chdir=e2e_tests output -raw local_macos_connection 2>/dev/null || echo local)"; \
+	become_arg=""; \
+	if [ "$$deploy_local_macos_client" = "true" ] && [ "$$local_macos_connection" = "local" ]; then \
+		become_arg="--ask-become-pass"; \
+	fi; \
+	$(E2E_VENV_PATH_PREFIX) OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook $$become_arg -i "$(E2E_INVENTORY_FILE)" e2e_tests/ansible/assert_remove.yml --limit "$${E2E_LIMIT:-nomad_clients}" --extra-vars "@$(E2E_EXTRA_VARS_FILE)"
 
 e2e-destroy:
 	terraform -chdir=e2e_tests destroy

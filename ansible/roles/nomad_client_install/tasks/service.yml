@@ -7,6 +7,46 @@
     - ansible_facts["system"] == "Linux"
     - nomad_client_install_reset_state | bool
 
+- name: Stop Nomad service before state reset (macOS)
+  ansible.builtin.shell: |
+    if launchctl print system/{{ nomad_client_install_launchd_label }} >/dev/null 2>&1; then
+      launchctl bootout system/{{ nomad_client_install_launchd_label }}
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+  when:
+    - ansible_facts["system"] == "Darwin"
+    - nomad_client_install_reset_state | bool
+
+- name: Reset Nomad client state directory (macOS)
+  ansible.builtin.file:
+    path: "{{ nomad_client_install_state_dir }}"
+    state: absent
+  when:
+    - ansible_facts["system"] == "Darwin"
+    - nomad_client_install_reset_state | bool
+
+- name: Recreate Nomad client state directory (macOS)
+  ansible.builtin.file:
+    path: "{{ nomad_client_install_state_dir }}"
+    state: directory
+    mode: "0750"
+  when:
+    - ansible_facts["system"] == "Darwin"
+    - nomad_client_install_reset_state | bool
+
+- name: Rewrite Nomad client introduction token file after state reset (macOS)
+  ansible.builtin.copy:
+    content: "{{ nomad_client_install_intro_token }}"
+    dest: "{{ nomad_client_install_state_dir }}/intro_token.jwt"
+    mode: "0600"
+  when:
+    - ansible_facts["system"] == "Darwin"
+    - nomad_client_install_reset_state | bool
+    - nomad_client_install_intro_token | length > 0
+  no_log: true
+
 - name: Reset Nomad client state directory (Linux)
   ansible.builtin.file:
     path: "{{ nomad_client_install_state_dir }}"

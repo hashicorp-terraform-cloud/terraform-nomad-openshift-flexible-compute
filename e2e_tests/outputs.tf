@@ -28,6 +28,21 @@ output "windows_admin_username" {
   value       = var.windows_admin_username
 }
 
+output "deploy_local_macos_client" {
+  description = "Whether the optional local macOS client target is enabled in generated inventory."
+  value       = var.deploy_local_macos_client
+}
+
+output "local_macos_connection" {
+  description = "Connection mode for the optional local macOS client target."
+  value       = lower(trimspace(var.local_macos_connection))
+}
+
+output "local_macos_host_alias" {
+  description = "Inventory host alias for the optional local macOS client target."
+  value       = var.local_macos_host_alias
+}
+
 output "generated_ssh_private_key_pem" {
   description = "Generated private key PEM used by the E2E EC2 key pair for Linux SSH access and Windows password-data decryption."
   value       = tls_private_key.e2e.private_key_pem

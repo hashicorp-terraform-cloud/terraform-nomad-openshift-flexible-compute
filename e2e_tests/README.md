@@ -59,12 +59,12 @@ Terraform also decrypts the Windows administrator password natively via `rsadecr
 
 Create a local tfvars file first:
 
-1. Copy `terraform.tfvars.example` to `terraform.tfvars`.
+1. Copy `terraform.tfvars.example` to either `terraform.auto.tfvars` or `terraform.tfvars`.
 1. Choose one mode:
    - Keep `deploy_nomad_server = true` (default) for self-contained single-node server.
    - Set `deploy_nomad_server = false` and set `nomad_server_address` to an external server.
 
-When using `make e2e` from the repository root, the Makefile now creates `e2e_tests/terraform.tfvars` from the example if it is missing and exits with instructions, so you can fill in the required value before retrying.
+When using `make e2e` from the repository root, the Makefile now creates `e2e_tests/terraform.auto.tfvars` from the example if both supported tfvars files are missing and exits with instructions, so you can fill in the required values before retrying.
 
 At minimum, set either:
 
@@ -85,6 +85,16 @@ Optional:
    - If empty and running self-hosted E2E (`deploy_nomad_server = true`) with ACL enabled, the harness auto-generates a token and stores it in `.artifacts/nomad_client_intro_token.txt`.
    - If set, the provided value is authoritative and auto-generated token artifacts are ignored.
 - `allowed_cidr_blocks`: restrict access to ports `22`, `5986`, and `4646` (Nomad API readiness checks).
+- `deploy_local_macos_client`: optionally include your local macOS machine as an additional `nomad_clients` target (disabled by default).
+   - Default mode (`false`) keeps the existing AWS-only host behavior.
+   - Set `deploy_local_macos_client = true` in `terraform.auto.tfvars` or `terraform.tfvars` to enable local macOS execution.
+   - Optional local settings:
+      - `local_macos_connection` (`local` or `ssh`, default `local`)
+      - `local_macos_host_alias` (default `macos-local`)
+      - `local_macos_ssh_host` and `local_macos_ssh_user` (required only for `ssh` mode)
+   - In self-contained mode, local macOS `local` connection requires private network reachability to the Nomad server RPC address (`:4647`).
+   - If your workstation cannot route to the VPC directly, use `bash e2e_tests/scripts/setup_local_macos_nomad_tunnel.sh` (or `make e2e-setup-local-macos-tunnel`) to create a loopback alias + SSH tunnel that preserves the private RPC target from the Nomad agent's perspective.
+   - Use `bash e2e_tests/scripts/cleanup_local_macos_nomad_tunnel.sh` (or `make e2e-cleanup-local-macos-tunnel`) to remove the alias/tunnel after the E2E run.
 
 When you use `make e2e-*`, you do **not** need to manage SSH key material manually. If you run Terraform directly instead of using the Makefile, the harness still generates a disposable key pair automatically.
 
@@ -121,6 +131,16 @@ nomad_acl_enabled        = true
 # redhat_ami_id        = "ami-xxxxxxxxxxxxxxxxx"
 # redhat_instance_type = "t3a.small"
 # redhat_ssh_user      = "ec2-user"
+
+# Optional local macOS target (disabled by default)
+# WARNING: this modifies local Nomad files and launchd state during install/remove.
+# deploy_local_macos_client = true
+# local_macos_connection    = "local"
+# local_macos_host_alias    = "macos-local"
+# SSH-mode alternative:
+# local_macos_connection    = "ssh"
+# local_macos_ssh_host      = "macbook.local"
+# local_macos_ssh_user      = "your-user"
 
 # External-server mode (optional)
 # deploy_nomad_server    = false
@@ -167,13 +187,17 @@ From repository root:
    - `E2E_SSH_WAIT_MAX_ATTEMPTS` (default `60`)
    - `E2E_SSH_WAIT_SLEEP_SECONDS` (default `10`)
 
-   The E2E harness defaults to community edition (`nomad`, version `1.11.3`) and derives package selection from `nomad_edition`. You can configure edition/version/license through `e2e_tests/terraform.tfvars` (`nomad_edition`, `nomad_version`, `nomad_license`). When `nomad_edition = "enterprise"`, `nomad_license` is required so the self-hosted Nomad server can start with a valid enterprise license.
+   The E2E harness defaults to community edition (`nomad`, version `1.11.3`) and derives package selection from `nomad_edition`. You can configure edition/version/license through either `e2e_tests/terraform.auto.tfvars` or `e2e_tests/terraform.tfvars` (`nomad_edition`, `nomad_version`, `nomad_license`). When `nomad_edition = "enterprise"`, `nomad_license` is required so the self-hosted Nomad server can start with a valid enterprise license.
 
    The generated extra vars also enable the Nomad `raw_exec` task driver on Windows E2E clients so `run_test_jobs.sh` can submit the Windows wait job prior to remove.
 
    The E2E install flow resets each client's Nomad state directory before service startup. This ensures clients can re-register cleanly when the self-hosted Nomad server is replaced between runs.
 
    On macOS controllers, the scripts automatically set `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` when not already set to avoid intermittent Ansible worker crashes during mixed SSH/WinRM execution.
+
+   If `deploy_local_macos_client = true`, preflight enforces an explicit safety gate before destructive local execution. Set `E2E_ALLOW_LOCAL_MACOS_DESTRUCTIVE=true` to proceed.
+
+   For local macOS `local` mode, the Make targets also run `make e2e-setup-local-macos-tunnel` automatically before install/assert/remove workflows. The helper is a no-op when local macOS mode is disabled, when `local_macos_connection = "ssh"`, or when direct private RPC reachability already works.
 
 1. Assert install behavior:
 
@@ -198,6 +222,31 @@ As a convenience, `make e2e-check` runs non-destructive E2E validation tasks, in
    make e2e-destroy
 
 When using Make targets, `make e2e-run-remove` now runs `make e2e-run-test-jobs` first so removal always executes with active test workloads on eligible clients.
+
+## Local macOS tunnel helpers
+
+When the local macOS target cannot route directly to the self-hosted Nomad server private RPC endpoint, use these helpers:
+
+- `bash e2e_tests/scripts/setup_local_macos_nomad_tunnel.sh`
+- `bash e2e_tests/scripts/cleanup_local_macos_nomad_tunnel.sh`
+
+Or via Make:
+
+- `make e2e-setup-local-macos-tunnel`
+- `make e2e-cleanup-local-macos-tunnel`
+
+The setup helper:
+
+- reads Terraform outputs for the self-hosted Nomad server public/private addresses
+- adds the server private IP as a temporary `lo0` alias on your Mac when needed
+- starts an SSH local-forward bound to that private IP on port `4647`
+- leaves Nomad free to keep dialing the private RPC target already rendered in `nomad.hcl`
+
+The cleanup helper:
+
+- stops the managed SSH tunnel process if it is still running
+- removes the temporary `lo0` alias if the setup helper created it
+- clears the local state file under `e2e_tests/.artifacts/`
 
 ## ACL bootstrap helper
 

@@ -9,8 +9,9 @@
 	- `nomad_client_hosts` remains comma-separated and is split/trimmed into `aap_host` resources
 	- `terraform_data.nomad_client_lifecycle` remains the orchestration point for install/remove side effects
 	- `local.install_nomad_client_extra_vars` stays aligned with `ansible/roles/nomad_client_install/defaults/main.yml`
-	- When `nomad_client_install_reset_state` is true, the install workflow must preserve expected intro-token semantics by rewriting `intro_token.jwt` after state directory reset on Linux and Windows
+	- When `nomad_client_install_reset_state` is true, the install workflow must preserve expected intro-token semantics by rewriting `intro_token.jwt` after state directory reset on Linux, macOS, and Windows
 	- E2E install assertions for intro token state must derive the expected token path from `nomad_state_dir` (with platform defaults), not hard-coded paths
+	- Local macOS E2E `local` mode preserves the private Nomad RPC target by using the managed tunnel helpers under `e2e_tests/scripts/`; do not redesign that flow to depend on public RPC advertise addresses unless the broader AWS-first topology changes intentionally
 - For detailed Terraform/Ansible editing rules, see:
 	- `.github/instructions/terraform.instructions.md`
 	- `.github/instructions/ansible.instructions.md`
@@ -21,6 +22,7 @@
 	- Terraform: `make terraform-check`, `make tflint`
 	- Ansible: `make ansible-check`, `make ansible-lint`
 	- E2E harness: `make e2e-install`, `make e2e-assert-install`, `make e2e-run-remove`, `make e2e-assert-remove`
+- For local macOS E2E work, the tunnel helper targets `make e2e-setup-local-macos-tunnel` and `make e2e-cleanup-local-macos-tunnel` are the supported way to manage the private-RPC loopback alias and SSH tunnel lifecycle.
 - Terraform direct flow (when needed): `terraform fmt -recursive`, `terraform init -backend=false -input=false`, `terraform validate`.
 - E2E setup and runtime details live in `e2e_tests/README.md`.
 - For install-role changes affecting rendered files, run `make e2e-install` before `make e2e-assert-install` so assertions validate the latest role behavior on hosts.
