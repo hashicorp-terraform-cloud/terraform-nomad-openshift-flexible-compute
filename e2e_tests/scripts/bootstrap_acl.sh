@@ -145,9 +145,16 @@ fi
 rm -f "${INTRO_TOKEN_FILE}"
 
 if ! command -v nomad >/dev/null 2>&1; then
-  echo "nomad CLI is required to auto-generate a client introduction token." >&2
-  echo "Install nomad locally, or set client_introduction_token in e2e_tests/terraform.auto.tfvars or e2e_tests/terraform.tfvars." >&2
-  exit 1
+  echo "nomad CLI is not installed locally; skipping auto-generation of a client introduction token." >&2
+  echo "To enable auto-generation, install a recent Nomad CLI (>= 1.10), or set client_introduction_token in e2e_tests/terraform.auto.tfvars or e2e_tests/terraform.tfvars." >&2
+  exit 0
+fi
+
+if ! nomad node -help 2>/dev/null | grep -Eq '^[[:space:]]+intro([[:space:]]|$)'; then
+  echo "Local nomad CLI does not support 'nomad node intro create'; skipping intro token auto-generation." >&2
+  echo "Detected CLI: $(nomad version | head -n 1)" >&2
+  echo "Install a recent Nomad CLI (>= 1.10), or set client_introduction_token in e2e_tests/terraform.auto.tfvars or e2e_tests/terraform.tfvars." >&2
+  exit 0
 fi
 
 nomad_cli_env=(
@@ -165,7 +172,20 @@ if [[ -f "${NOMAD_CA_CERT_FILE}" && -f "${NOMAD_CLIENT_CERT_FILE}" && -f "${NOMA
   )
 fi
 
-intro_token_json="$(env "${nomad_cli_env[@]}" nomad node intro create -ttl "${intro_token_ttl}" -json)"
+set +e
+intro_token_json="$(env "${nomad_cli_env[@]}" nomad node intro create -ttl "${intro_token_ttl}" -json 2>&1)"
+intro_token_exit_code=$?
+set -e
+
+if [[ ${intro_token_exit_code} -ne 0 ]]; then
+  echo "Failed to auto-generate Nomad client introduction token using local CLI." >&2
+  echo "nomad node intro create exited with status ${intro_token_exit_code}." >&2
+  echo "CLI output:" >&2
+  echo "${intro_token_json}" >&2
+  echo "Set client_introduction_token in e2e_tests/terraform.auto.tfvars or e2e_tests/terraform.tfvars to proceed without local generation." >&2
+  exit 1
+fi
+
 intro_token="$(echo "${intro_token_json}" | jq -r '.JWT // empty')"
 
 if [[ -z "${intro_token}" ]]; then

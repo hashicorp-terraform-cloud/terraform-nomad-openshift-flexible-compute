@@ -31,7 +31,7 @@ In self-contained mode (`deploy_nomad_server = true`), Nomad ACLs are enabled by
 - Local tools:
   - `jq`
   - `curl`
-  - `nomad` (required only when auto-generating client introduction tokens in ACL-enabled self-hosted mode)
+  - `nomad` (required only when auto-generating client introduction tokens in ACL-enabled self-hosted mode; use Nomad CLI `>= 1.10` for `nomad node intro create` support)
 
 When you use the repository `make` targets for Ansible or E2E workflows, the Makefile now creates or refreshes a repo-local virtual environment at `.venv/` and installs the Python dependencies from `e2e_tests/requirements.txt` before running the playbooks.
 

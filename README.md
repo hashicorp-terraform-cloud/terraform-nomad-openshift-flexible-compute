@@ -117,6 +117,7 @@ Key variables (set via AAP extra vars or role defaults):
 ### Remove (`ansible/remove_nomad_client.yml`)
 
 - Drains each node before uninstall by disabling eligibility and enabling drain; uninstall does not proceed if drain fails
+- Skips self drain and self purge steps when the Nomad CLI is already absent, so repeated remove runs remain idempotent
 - Stops Nomad using systemd (Linux), `launchd` (macOS), or Windows services
 - Removes Nomad package variants (`nomad` and `nomad-enterprise`) on RedHat and Debian
 - Removes direct-download artifacts on Linux (non-package), macOS, and Windows
@@ -127,12 +128,12 @@ Key variables (set via AAP extra vars or role defaults):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `nomad_client_remove_drain_before_uninstall` | `true` | Require a successful drain before uninstalling Nomad |
-| `nomad_client_remove_drain_force` | `true` | Use forced drain (`-force`) |
+| `nomad_client_remove_drain_force` | `true` | Use forced drain (`-force`); when true, `nomad_client_remove_drain_deadline` is not passed |
 | `nomad_client_remove_drain_deadline` | `30m` | Drain deadline passed to `nomad node drain -deadline` |
 | `nomad_edition` | `community` | Client edition (`community` or `enterprise`) used to derive package removal behavior |
 | `nomad_client_remove_allocations_wait_retries` | `12` | Number of post-drain allocation polling attempts before failing |
 | `nomad_client_remove_allocations_wait_delay_seconds` | `10` | Delay in seconds between post-drain allocation polling attempts |
-| `nomad_client_remove_nomad_addr` | `""` | Optional explicit Nomad API address (`NOMAD_ADDR`) |
+| `nomad_client_remove_nomad_addr` | `""` | Optional explicit Nomad API address for server-side operations (for example, node purge); self drain/eligibility operations use the local client API |
 | `nomad_client_remove_nomad_token` | `""` | Optional ACL token used for drain operations (`NOMAD_TOKEN`) |
 | `nomad_client_remove_delete_state` | `true` | Delete Nomad client state/data directories during remove (deletes node identity state) |
 | `nomad_client_remove_purge_node` | `true` | Purge node from Nomad server list during remove; recommended when deleting state |
