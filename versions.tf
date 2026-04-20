@@ -4,11 +4,11 @@ terraform {
   required_providers {
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 3.1"
+      version = "~> 3.1.1"
     }
     aap = {
       source  = "ansible/aap"
-      version = "~> 1.4"
+      version = "~> 1.4.0"
     }
   }
 }

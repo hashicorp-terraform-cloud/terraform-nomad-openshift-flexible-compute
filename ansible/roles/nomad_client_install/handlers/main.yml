@@ -1,14 +1,27 @@
 ---
-- name: Restart nomad service
+- name: Restart nomad service (Linux)
   ansible.builtin.service:
-    name: nomad
+    name: "{{ nomad_client_install_service_name }}"
     state: restarted
   listen: Restart nomad
-  when: ansible_os_family != "Windows"
+  when: ansible_facts["system"] == "Linux"
+
+- name: Restart nomad service (macOS)
+  ansible.builtin.shell: |
+    if launchctl print system/{{ nomad_client_install_launchd_label }} >/dev/null 2>&1; then
+      launchctl kickstart -k system/{{ nomad_client_install_launchd_label }}
+    else
+      launchctl bootstrap system "{{ nomad_client_install_launchd_plist_path }}"
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+  listen: Restart nomad
+  when: ansible_facts["system"] == "Darwin"
 
 - name: Restart nomad service (Windows)
   ansible.windows.win_service:
-    name: nomad
+    name: "{{ nomad_client_install_service_name }}"
     state: restarted
   listen: Restart nomad
-  when: ansible_os_family == "Windows"
+  when: ansible_facts["os_family"] == "Windows"

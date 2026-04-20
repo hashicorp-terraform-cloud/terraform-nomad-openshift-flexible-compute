@@ -1,5 +1,5 @@
 ---
-- name: Install Nomad Enterprise
+- name: Install Nomad
   ansible.builtin.include_tasks: install.yml
 
 - name: Configure Nomad client

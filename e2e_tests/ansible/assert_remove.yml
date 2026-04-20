@@ -1,0 +1,89 @@
+---
+- name: Assert Nomad client remove state
+  hosts: nomad_clients
+  gather_facts: true
+  become: "{{ (ansible_connection | default('ssh')) not in ['winrm', 'psrp'] }}"
+
+  tasks:
+    - name: Set expected Nomad directories
+      ansible.builtin.set_fact:
+        nomad_config_dir: >-
+          {{ 'C:\\ProgramData\\Nomad\\config' if ansible_facts['os_family'] == 'Windows' else '/etc/nomad.d' }}
+        nomad_data_dir: >-
+          {{ 'C:\\ProgramData\\Nomad\\data' if ansible_facts['os_family'] == 'Windows' else '/opt/nomad' }}
+        nomad_state_dir: >-
+          {{ 'C:\\ProgramData\\Nomad\\data\\client' if ansible_facts['os_family'] == 'Windows' else '/opt/nomad/client' }}
+
+    - name: Gather Linux service facts
+      ansible.builtin.service_facts:
+      when: ansible_facts['system'] == 'Linux'
+
+    - name: Assert Nomad service is not running (Linux)
+      ansible.builtin.assert:
+        that:
+          - "('nomad.service' not in ansible_facts.services) or (ansible_facts.services['nomad.service'].state != 'running')"
+        fail_msg: "Nomad service is still running on Linux host."
+      when: ansible_facts['system'] == 'Linux'
+
+    - name: Check Nomad launchd state (macOS)
+      ansible.builtin.shell: launchctl print system/com.hashicorp.nomad
+      args:
+        executable: /bin/bash
+      register: nomad_launchd_status
+      changed_when: false
+      failed_when: false
+      when: ansible_facts['system'] == 'Darwin'
+
+    - name: Assert Nomad launchd service is not loaded (macOS)
+      ansible.builtin.assert:
+        that:
+          - nomad_launchd_status.rc != 0
+        fail_msg: "Nomad launchd service still appears loaded on macOS host."
+      when: ansible_facts['system'] == 'Darwin'
+
+    - name: Gather Windows Nomad service details
+      ansible.windows.win_service_info:
+        name: nomad
+      register: nomad_service_windows
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Assert Nomad service removed (Windows)
+      ansible.builtin.assert:
+        that:
+          - nomad_service_windows.services | length == 0
+        fail_msg: "Nomad Windows service still exists after removal."
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Check Nomad directories (POSIX)
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ nomad_config_dir }}"
+        - "{{ nomad_data_dir }}"
+        - "{{ nomad_state_dir }}"
+      register: nomad_dirs_posix
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Assert Nomad directories removed (POSIX)
+      ansible.builtin.assert:
+        that:
+          - "(nomad_dirs_posix.results | map(attribute='stat.exists') | list | select('equalto', true) | list | length) == 0"
+        fail_msg: "One or more POSIX Nomad directories still exist after removal."
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Check Nomad directories (Windows)
+      ansible.windows.win_stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ nomad_config_dir }}"
+        - "{{ nomad_data_dir }}"
+        - "{{ nomad_state_dir }}"
+      register: nomad_dirs_windows
+      when: ansible_facts['os_family'] == 'Windows'
+
+    - name: Assert Nomad directories removed (Windows)
+      ansible.builtin.assert:
+        that:
+          - "(nomad_dirs_windows.results | map(attribute='stat.exists') | list | select('equalto', true) | list | length) == 0"
+        fail_msg: "One or more Windows Nomad directories still exist after removal."
+      when: ansible_facts['os_family'] == 'Windows'

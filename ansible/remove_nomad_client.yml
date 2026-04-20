@@ -1,6 +1,6 @@
 ---
 - name: Remove Nomad Enterprise Client
   hosts: all
-  become: true
+  become: "{{ (ansible_connection | default('ssh')) not in ['winrm', 'psrp'] }}"
   roles:
     - nomad_client_remove
